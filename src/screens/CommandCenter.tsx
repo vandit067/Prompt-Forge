@@ -1744,7 +1744,7 @@ export function CommandCenter({
         type="file"
         onChange={handleFolderChange}
         style={{ display: 'none' }}
-        {...({ webkitdirectory: true } as any)}
+        {...({ webkitdirectory: 'true' } as any)}
       />
     </div>
   );

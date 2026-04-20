@@ -35,10 +35,10 @@ export default function App() {
     }
   }
 
-  // Clicking a sidebar task stays on command-center and loads output in tab panel
+  // Clicking a sidebar task navigates to task-detail view
   function handleSelectTask(taskId: string) {
     setSelectedTaskId(taskId);
-    setCurrentScreen('command-center');
+    setCurrentScreen('task-detail');
   }
 
   function handleClearSelection() {

@@ -31,6 +31,7 @@ export async function spawnClaude(userInput, { onAbort, projectContext, knownIss
   const prompt = `${rules}${contextBlock}${knownIssuesBlock}\n\n---\n\nTASK:\n${userInput}`;
 
   return new Promise((resolve, reject) => {
+    console.log('Spawning claude with prompt length:', prompt.length);
     const proc = spawn('claude', ['-p', prompt], {
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 120000, // 2 min timeout
@@ -43,13 +44,16 @@ export async function spawnClaude(userInput, { onAbort, projectContext, knownIss
 
     proc.stdout.on('data', (d) => {
       stdout += d.toString();
+      console.log('stdout data received:', d.toString().slice(0, 100));
     });
 
     proc.stderr.on('data', (d) => {
       stderr += d.toString();
+      console.log('stderr data received:', d.toString().slice(0, 200));
     });
 
     proc.on('error', (err) => {
+      console.error('Process error:', err);
       if (err.code === 'ENOENT') {
         reject({ code: 'CLI_NOT_INSTALLED' });
       } else {
@@ -58,6 +62,7 @@ export async function spawnClaude(userInput, { onAbort, projectContext, knownIss
     });
 
     proc.on('close', (code) => {
+      console.log('Process closed with code:', code, 'stdout length:', stdout.length, 'stderr:', stderr.slice(0, 200));
       // code === null means process was killed
       if (code === null) {
         reject({ code: 'CANCELLED' });

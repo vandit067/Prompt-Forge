@@ -60,15 +60,15 @@ function TypeBar({ type, count, maxCount }: { type: TaskType; count: number; max
   const cfg = TASK_TYPE_CONFIG[type];
   const pct = maxCount === 0 ? 0 : Math.round((count / maxCount) * 100);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
       <div style={{ width: '110px', flexShrink: 0 }}>
         <span
           style={{
             display: 'inline-flex',
             padding: '2px 7px',
-            borderRadius: '5px',
+            borderRadius: radius.sm,
             fontSize: '10px',
-            fontFamily: '"JetBrains Mono", monospace',
+            fontFamily: fonts.mono,
             color: cfg.color,
             background: cfg.bg,
           }}
@@ -76,18 +76,18 @@ function TypeBar({ type, count, maxCount }: { type: TaskType; count: number; max
           {cfg.label}
         </span>
       </div>
-      <div style={{ flex: 1, height: '8px', background: '#18181b', borderRadius: '4px', overflow: 'hidden' }}>
+      <div style={{ flex: 1, height: '8px', background: colors.bgInput, borderRadius: radius.sm, overflow: 'hidden' }}>
         <div
           style={{
             height: '100%',
             width: `${pct}%`,
             background: cfg.color,
-            borderRadius: '4px',
+            borderRadius: radius.sm,
             transition: 'width 0.6s ease',
           }}
         />
       </div>
-      <span style={{ width: '28px', textAlign: 'right', fontSize: '11px', color: '#71717a', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
+      <span style={{ width: '28px', textAlign: 'right', fontSize: '11px', color: colors.fgMuted, fontFamily: fonts.mono, flexShrink: 0 }}>
         {count}
       </span>
     </div>
@@ -123,7 +123,7 @@ function WeeklyTrendChart({ data }: { data: { week: string; rate: number; succes
             y1={chartHeight - (v / 100) * chartHeight}
             x2="100"
             y2={chartHeight - (v / 100) * chartHeight}
-            stroke="#18181b"
+            stroke={colors.bgInput}
             strokeWidth="0.5"
           />
         ))}
@@ -131,15 +131,15 @@ function WeeklyTrendChart({ data }: { data: { week: string; rate: number; succes
         {/* Area fill */}
         <path
           d={`${pathD} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`}
-          fill="#3b82f622"
+          fill={`${colors.blue}22`}
         />
 
         {/* Line */}
-        <path d={pathD} stroke="#3b82f6" strokeWidth="1.5" fill="none" />
+        <path d={pathD} stroke={colors.blue} strokeWidth="1.5" fill="none" />
 
         {/* Points */}
         {points.map((p, i) => (
-          <circle key={`point-${i}`} cx={p.x} cy={p.y} r="1.5" fill="#3b82f6" />
+          <circle key={`point-${i}`} cx={p.x} cy={p.y} r="1.5" fill={colors.blue} />
         ))}
 
         {/* Y-axis labels */}
@@ -149,7 +149,7 @@ function WeeklyTrendChart({ data }: { data: { week: string; rate: number; succes
             x="2"
             y={chartHeight - (v / 100) * chartHeight + 3}
             fontSize="8"
-            fill="#52525b"
+            fill={colors.fgDim}
           >
             {v}%
           </text>
@@ -157,16 +157,16 @@ function WeeklyTrendChart({ data }: { data: { week: string; rate: number; succes
       </svg>
 
       {/* Week labels and values */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '4px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: space.xs }}>
         {data.map(d => (
           <div key={d.week} style={{ flex: 1, textAlign: 'center' }}>
-            <div style={{ fontSize: '9px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+            <div style={{ fontSize: '9px', color: colors.fgDim, fontFamily: fonts.mono }}>
               {d.week}
             </div>
-            <div style={{ fontSize: '10px', color: '#22c55e', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+            <div style={{ fontSize: '10px', color: colors.success, fontFamily: fonts.mono, fontWeight: 600 }}>
               {d.rate}%
             </div>
-            <div style={{ fontSize: '8px', color: '#71717a', fontFamily: '"JetBrains Mono", monospace' }}>
+            <div style={{ fontSize: '8px', color: colors.fgMuted, fontFamily: fonts.mono }}>
               {d.successes}/{d.total}
             </div>
           </div>

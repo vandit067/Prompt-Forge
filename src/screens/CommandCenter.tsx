@@ -24,9 +24,9 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
   return (
     <div
       style={{
-        background: '#0f0f12',
-        border: '1px solid #1c1c22',
-        borderRadius: '12px',
+        background: colors.bgCard,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.xl,
         overflow: 'hidden',
       }}
     >
@@ -34,9 +34,9 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
       <div
         style={{
           display: 'flex',
-          borderBottom: '1px solid #1c1c22',
-          background: '#0a0a0d',
-          padding: '0 4px',
+          borderBottom: `1px solid ${colors.border}`,
+          background: colors.bgMuted,
+          padding: `0 ${space.xs}`,
         }}
       >
         {TABS.map(tab => (
@@ -46,24 +46,24 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '11px 14px',
+              gap: space.sm,
+              padding: `11px ${space.md}`,
               border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : '2px solid transparent',
+              borderBottom: activeTab === tab.id ? `2px solid ${colors.blue}` : '2px solid transparent',
               background: 'transparent',
-              color: activeTab === tab.id ? '#fafafa' : '#71717a',
+              color: activeTab === tab.id ? colors.fg : colors.fgMuted,
               fontSize: '12px',
-              fontFamily: '"Inter", system-ui, sans-serif',
+              fontFamily: fonts.sans,
               fontWeight: activeTab === tab.id ? 500 : 400,
               cursor: 'pointer',
-              transition: 'color 0.12s',
+              transition: `color ${transitions.fast}`,
               marginBottom: '-1px',
             }}
             onMouseEnter={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = '#d4d4d8';
+              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
             }}
             onMouseLeave={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = '#71717a';
+              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgMuted;
             }}
           >
             {tab.icon}
@@ -71,11 +71,11 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
             <span
               style={{
                 padding: '1px 5px',
-                borderRadius: '4px',
-                background: activeTab === tab.id ? '#1e3a5f' : '#18181b',
-                color: activeTab === tab.id ? '#93c5fd' : '#52525b',
+                borderRadius: radius.sm,
+                background: activeTab === tab.id ? colors.blueBg : colors.bgInput,
+                color: activeTab === tab.id ? colors.blueLight : colors.fgDim,
                 fontSize: '10px',
-                fontFamily: '"JetBrains Mono", monospace',
+                fontFamily: fonts.mono,
               }}
             >
               {tab.count}
@@ -85,16 +85,16 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
       </div>
 
       {/* Tab content */}
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: space.lg }}>
         {activeTab === 'prompts' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
             {task.generatedPrompts.map((prompt) => (
               <div
                 key={prompt.id}
                 style={{
-                  background: '#0a0a0d',
-                  border: '1px solid #1c1c22',
-                  borderRadius: '8px',
+                  background: colors.bgMuted,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.lg,
                   overflow: 'hidden',
                 }}
               >

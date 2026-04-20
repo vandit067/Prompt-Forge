@@ -71,6 +71,7 @@ Verification:
 
   return [
     {
+      id: 'prompt-1',
       sessionLabel: 'Session 1 — Implementation',
       content: basePrompt + `
 
@@ -94,10 +95,12 @@ function generateFiles(taskType, input = '') {
   if (taskType === 'NEW_TOOL') {
     return [
       {
+        id: 'file-spec',
         filename: 'SPEC.md',
         content: `# Project Specification\n\n## Purpose\nDescription of what this tool/project does.\n\n## Features\n- Feature 1\n- Feature 2\n\n## Architecture\nHigh-level design.\n`,
       },
       {
+        id: 'file-claude',
         filename: 'CLAUDE.md',
         content: `# CLAUDE.md\n\nGuidelines for this project.\n\n## Rules\n- Keep code modular\n- Use meaningful names\n`,
       },
@@ -107,6 +110,7 @@ function generateFiles(taskType, input = '') {
   if (taskType === 'DOC_OR_SPEC') {
     return [
       {
+        id: 'file-docs',
         filename: 'DOCUMENTATION.md',
         content: `# Documentation\n\n## Overview\nMain documentation.\n\n## Getting Started\nStep-by-step guide.\n`,
       },

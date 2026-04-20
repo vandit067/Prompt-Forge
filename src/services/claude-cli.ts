@@ -1,4 +1,4 @@
-import type { Task } from '../types';
+import type { Task, ScannedContext } from '../types';
 
 export class CliNotInstalledError extends Error {
   constructor() {
@@ -14,15 +14,36 @@ export class GenerationCancelledError extends Error {
   }
 }
 
+export async function scanProject(folderPath: string): Promise<ScannedContext> {
+  const res = await fetch('/api/scan-project', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: folderPath }),
+  });
+
+  if (res.status === 404) throw new Error('Folder not found');
+  if (res.status === 400) {
+    const body = await res.json();
+    throw new Error(body.error || 'Invalid path');
+  }
+  if (!res.ok) {
+    const body = await res.json();
+    throw new Error(body.error || `Scan failed: HTTP ${res.status}`);
+  }
+
+  return res.json() as Promise<ScannedContext>;
+}
+
 export async function generateTask(
   input: string,
   projectPath: string | undefined,
+  scannedContext: ScannedContext | null,
   signal: AbortSignal
 ): Promise<Task> {
   const res = await fetch('/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input, projectPath }),
+    body: JSON.stringify({ input, projectPath, projectContext: scannedContext }),
     signal,
   });
 

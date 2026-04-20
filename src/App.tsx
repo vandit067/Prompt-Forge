@@ -4,8 +4,8 @@ import { CommandCenter, TaskDetail } from './screens/CommandCenter';
 import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
 import { api } from './lib/api';
-import { generateTask, CliNotInstalledError, GenerationCancelledError } from './services/claude-cli';
-import type { Task, Screen } from './types';
+import { generateTask, scanProject, CliNotInstalledError, GenerationCancelledError } from './services/claude-cli';
+import type { Task, Screen, ScannedContext } from './types';
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -15,6 +15,9 @@ export default function App() {
   const [liveTask, setLiveTask] = useState<Task | null>(null);
   const [dbReady, setDbReady] = useState(false);
   const [cliError, setCliError] = useState<'not_installed' | 'generation_failed' | null>(null);
+  const [scannedContext, setScannedContext] = useState<ScannedContext | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -53,7 +56,7 @@ export default function App() {
     setCliError(null);
 
     try {
-      const task = await generateTask(input, projectPath, controller.signal);
+      const task = await generateTask(input, projectPath, scannedContext, controller.signal);
       setTasks(prev => [task, ...prev]);
       setLiveTask(task);
     } catch (err) {
@@ -76,6 +79,21 @@ export default function App() {
   function handleCancel() {
     abortRef.current?.abort();
     setIsGenerating(false);
+  }
+
+  async function handleScanProject(path: string) {
+    setIsScanning(true);
+    setScanError(null);
+    setScannedContext(null);
+
+    try {
+      const ctx = await scanProject(path);
+      setScannedContext(ctx);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Scan failed');
+    } finally {
+      setIsScanning(false);
+    }
   }
 
   async function handleUpdateStatus(taskId: string, status: 'success' | 'error', notes?: string) {
@@ -144,6 +162,10 @@ export default function App() {
             onCancel={handleCancel}
             cliError={cliError}
             onClearError={() => setCliError(null)}
+            scannedContext={scannedContext}
+            isScanning={isScanning}
+            scanError={scanError}
+            onScanProject={handleScanProject}
           />
         );
 
@@ -159,6 +181,10 @@ export default function App() {
             onCancel={handleCancel}
             cliError={cliError}
             onClearError={() => setCliError(null)}
+            scannedContext={scannedContext}
+            isScanning={isScanning}
+            scanError={scanError}
+            onScanProject={handleScanProject}
           />
         );
     }

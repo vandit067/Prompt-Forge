@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { stmts } from './db.js';
 import { spawnClaude, buildTask, buildFallbackTask } from './claude-cli.js';
+import { scanProject } from './project-scanner.js';
 
 const app = express();
 app.use(cors());
@@ -36,9 +37,31 @@ app.get('/api/tasks', (_req, res) => {
   }
 });
 
+// POST /api/scan-project — scan a project folder for context
+app.post('/api/scan-project', async (req, res) => {
+  const { path: folderPath } = req.body;
+
+  if (!folderPath) {
+    return res.status(400).json({ error: 'path required' });
+  }
+
+  try {
+    const context = await scanProject(folderPath);
+    res.json(context);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    if (err.code === 'NOT_DIRECTORY') {
+      return res.status(400).json({ error: 'Path is not a directory' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/generate — generate a new task via Claude Code CLI
 app.post('/api/generate', async (req, res) => {
-  const { input, projectPath } = req.body;
+  const { input, projectPath, projectContext } = req.body;
 
   if (!input?.trim()) {
     return res.status(400).json({ error: 'input required' });
@@ -54,9 +77,10 @@ app.post('/api/generate', async (req, res) => {
       onAbort: (fn) => {
         kill = fn;
       },
+      projectContext: projectContext?.promptBlock,
     });
 
-    const task = buildTask(parsed, input, projectPath);
+    const task = buildTask(parsed, input, projectPath, projectContext);
     stmts.insertTask.run({
       id: task.id,
       title: task.title,
@@ -83,7 +107,7 @@ app.post('/api/generate', async (req, res) => {
     }
     if (err.code === 'PARSE_ERROR') {
       // Fallback: output raw response as a single prompt
-      const task = buildFallbackTask(input, err.raw, projectPath);
+      const task = buildFallbackTask(input, err.raw, projectPath, projectContext);
       stmts.insertTask.run({
         id: task.id,
         title: task.title,

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
-import type { Task, OutputTab, ProjectMode } from '../types';
+import type { Task, OutputTab, ProjectMode, ScannedContext } from '../types';
 
 /* ─── Shared Output Panel ─── */
 interface OutputPanelProps {
@@ -457,8 +457,135 @@ function GenerationErrorBanner({ onDismiss }: { onDismiss: () => void }) {
 }
 
 /* ─── Project Context Card ─── */
-function ProjectContextCard() {
+interface ProjectContextCardProps {
+  scannedContext: ScannedContext | null;
+  isScanning: boolean;
+  scanError: string | null;
+  projectPath: string;
+  onRescan: () => void;
+}
+
+function ProjectContextCard({ scannedContext, isScanning, scanError, projectPath, onRescan }: ProjectContextCardProps) {
   const [expanded, setExpanded] = useState(false);
+
+  // Scanning state
+  if (isScanning) {
+    return (
+      <div
+        style={{
+          background: '#0a0a0d',
+          border: '1px solid #1c1c22',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}
+      >
+        <div
+          style={{
+            width: '12px',
+            height: '12px',
+            border: '1.5px solid #52525b',
+            borderTopColor: '#3b82f6',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
+        <span style={{ fontSize: '12px', color: '#a1a1aa', fontFamily: '"JetBrains Mono", monospace' }}>
+          Scanning {projectPath}…
+        </span>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // Error state
+  if (scanError) {
+    return (
+      <div
+        style={{
+          background: '#4a2c2c',
+          border: '1px solid #8b4444',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#fca5a5', marginBottom: '4px' }}>
+            Scan failed
+          </div>
+          <div style={{ fontSize: '11px', color: '#d4d4d8', fontFamily: '"JetBrains Mono", monospace' }}>
+            {scanError}
+          </div>
+        </div>
+        <button
+          onClick={onRescan}
+          style={{
+            padding: '4px 10px',
+            background: 'transparent',
+            border: '1px solid #8b4444',
+            borderRadius: '4px',
+            color: '#fca5a5',
+            fontSize: '11px',
+            cursor: 'pointer',
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // No scanned context
+  if (!scannedContext) {
+    return (
+      <div
+        style={{
+          background: '#0a0a0d',
+          border: '1px solid #1c1c22',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          color: '#71717a',
+          fontSize: '12px',
+          fontFamily: '"JetBrains Mono", monospace',
+        }}
+      >
+        Select a folder to scan for project context
+      </div>
+    );
+  }
+
+  // No companion files warning
+  if (!scannedContext.hasCompanionFiles) {
+    return (
+      <div
+        style={{
+          background: '#5f3e0a',
+          border: '1px solid #b8860b',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '10px',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#fcd34d', marginBottom: '4px' }}>
+            No SPEC.md or CLAUDE.md found
+          </div>
+          <div style={{ fontSize: '11px', color: '#d4d4d8' }}>
+            Output will be generic. Add SPEC.md or CLAUDE.md to provide project context.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Full context card
   return (
     <div
       style={{
@@ -487,36 +614,31 @@ function ProjectContextCard() {
           <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#3b82f6', background: '#1e3a5f', padding: '1px 6px', borderRadius: '4px' }}>
             DETECTED
           </span>
-          <Badge label="Electron" />
-          <Badge label="React" />
-          <Badge label="TypeScript" />
+          {scannedContext.techStack.map(tech => <Badge key={tech} label={tech} />)}
         </div>
         {expanded ? <ChevronUp size={13} color="#71717a" /> : <ChevronDown size={13} color="#71717a" />}
       </button>
       {expanded && (
         <div style={{ padding: '0 14px 12px', borderTop: '1px solid #1c1c22' }}>
           <div style={{ paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <ContextRow label="Path" value="/Users/you/my-project" />
-            <ContextRow label="Stack" value="Electron + Vite + React 18 + TypeScript" />
-            <ContextRow label="SPEC.md" value="Found — purpose, 5 screens, build order extracted" />
-            <ContextRow label="CLAUDE.md" value="Found — 6 workflow rules, 3 cost rules, 2 safety rules" />
-            <ContextRow label="package.json" value="Found — 14 dependencies detected" />
+            <ContextRow label="Path" value={scannedContext.projectPath} />
+            {scannedContext.techStack.length > 0 && (
+              <ContextRow label="Stack" value={scannedContext.techStack.join(', ')} />
+            )}
+            {scannedContext.keyFiles.map(file => (
+              <ContextRow
+                key={file.filename}
+                label={file.filename}
+                value={file.found ? (file.excerpt ? `✓ ${file.excerpt}` : '✓ Found') : '—'}
+              />
+            ))}
+            {scannedContext.rules.length > 0 && (
+              <ContextRow
+                label="Rules"
+                value={`${scannedContext.rules.length} rules detected`}
+              />
+            )}
           </div>
-          <button
-            style={{
-              marginTop: '10px',
-              padding: '4px 10px',
-              background: 'transparent',
-              border: '1px solid #1c1c22',
-              borderRadius: '5px',
-              color: '#71717a',
-              fontSize: '11px',
-              fontFamily: '"JetBrains Mono", monospace',
-              cursor: 'pointer',
-            }}
-          >
-            Override context
-          </button>
         </div>
       )}
     </div>
@@ -1136,6 +1258,10 @@ interface Props {
   onCancel?: () => void;
   cliError?: 'not_installed' | 'generation_failed' | null;
   onClearError?: () => void;
+  scannedContext?: ScannedContext | null;
+  isScanning?: boolean;
+  scanError?: string | null;
+  onScanProject?: (path: string) => Promise<void>;
 }
 
 export function CommandCenter({
@@ -1147,6 +1273,10 @@ export function CommandCenter({
   onCancel,
   cliError,
   onClearError,
+  scannedContext,
+  isScanning,
+  scanError,
+  onScanProject,
 }: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
@@ -1326,7 +1456,10 @@ export function CommandCenter({
                   <button
                     onClick={() => {
                       const p = window.prompt('Enter project path:', projectPath);
-                      if (p) setProjectPath(p);
+                      if (p) {
+                        setProjectPath(p);
+                        onScanProject?.(p);
+                      }
                     }}
                     style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '10px', cursor: 'pointer', padding: 0 }}
                   >
@@ -1412,7 +1545,15 @@ export function CommandCenter({
         </div>
 
         {/* Project context (when existing mode) */}
-        {projectMode === 'existing' && <ProjectContextCard />}
+        {projectMode === 'existing' && (
+          <ProjectContextCard
+            scannedContext={scannedContext}
+            isScanning={isScanning}
+            scanError={scanError}
+            projectPath={projectPath}
+            onRescan={() => onScanProject?.(projectPath)}
+          />
+        )}
 
         {/* CLI Error Banners */}
         {cliError === 'not_installed' && onClearError && (

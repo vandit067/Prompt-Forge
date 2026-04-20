@@ -10,7 +10,7 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export async function spawnClaude(userInput, { onAbort } = {}) {
+export async function spawnClaude(userInput, { onAbort, projectContext } = {}) {
   let rules;
   try {
     rules = readFileSync(RULES_PATH, 'utf8');
@@ -18,7 +18,12 @@ export async function spawnClaude(userInput, { onAbort } = {}) {
     throw { code: 'RULES_NOT_FOUND', message: err.message };
   }
 
-  const prompt = `${rules}\n\n---\n\nTASK:\n${userInput}`;
+  let contextBlock = '';
+  if (projectContext) {
+    contextBlock = `\n\n---\n\n${projectContext}\n`;
+  }
+
+  const prompt = `${rules}${contextBlock}\n\n---\n\nTASK:\n${userInput}`;
 
   return new Promise((resolve, reject) => {
     const proc = spawn('claude', ['-p', prompt], {
@@ -97,7 +102,7 @@ export function classifyTaskType(data) {
   return 'NEW_FEATURE';
 }
 
-export function buildTask(parsed, userInput, projectPath) {
+export function buildTask(parsed, userInput, projectPath, projectContext) {
   const now = new Date().toISOString();
   const taskType = classifyTaskType(parsed);
 
@@ -133,6 +138,7 @@ export function buildTask(parsed, userInput, projectPath) {
     input: userInput,
     taskType,
     projectPath: projectPath || undefined,
+    projectContext: projectContext?.promptBlock || undefined,
     generatedPrompts: prompts,
     generatedFiles: files,
     generatedPlan: plan,
@@ -144,7 +150,7 @@ export function buildTask(parsed, userInput, projectPath) {
 }
 
 // Fallback when JSON parsing fails — show raw output as a single prompt
-export function buildFallbackTask(userInput, rawOutput, projectPath) {
+export function buildFallbackTask(userInput, rawOutput, projectPath, projectContext) {
   const now = new Date().toISOString();
   const uid_ = uid();
 
@@ -154,6 +160,7 @@ export function buildFallbackTask(userInput, rawOutput, projectPath) {
     input: userInput,
     taskType: 'NEW_FEATURE',
     projectPath: projectPath || undefined,
+    projectContext: projectContext?.promptBlock || null,
     generatedPrompts: [
       {
         id: uid_,

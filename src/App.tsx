@@ -49,6 +49,7 @@ export default function App() {
   }
 
   async function handleGenerate(input: string, projectPath?: string) {
+    console.log('handleGenerate called', { input, projectPath });
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -61,18 +62,25 @@ export default function App() {
     try {
       // Pre-classify to query failures before starting generation
       const taskType = classifyTask(input);
+      console.log('Task type classified as:', taskType);
       const { count } = await getFailureCount(taskType);
+      console.log('Failure count:', count);
       setKnownIssuesCount(count);
 
+      console.log('Calling generateTask...');
       const task = await generateTask(input, projectPath, scannedContext, taskType, controller.signal);
+      console.log('Task generated:', task.id);
       setTasks(prev => [task, ...prev]);
       setLiveTask(task);
     } catch (err) {
       if (err instanceof CliNotInstalledError) {
+        console.error('CLI not installed');
         setCliError('not_installed');
       } else if (err instanceof GenerationCancelledError) {
+        console.log('Generation cancelled');
         // Silent cancel, don't show error
       } else if (err instanceof Error && err.name === 'AbortError') {
+        console.log('Generation aborted');
         // Silent abort, don't show error
       } else {
         setCliError('generation_failed');

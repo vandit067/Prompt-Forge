@@ -1297,7 +1297,12 @@ export function CommandCenter({
   }, [input]);
 
   function handleSubmit() {
-    if (!input.trim() || isGenerating) return;
+    console.log('handleSubmit called', { input: input.trim(), isGenerating });
+    if (!input.trim() || isGenerating) {
+      console.log('Skipping: no input or already generating');
+      return;
+    }
+    console.log('Calling onGenerate with:', { input: input.trim(), projectPath: projectMode === 'existing' ? projectPath : undefined });
     onGenerate(input.trim(), projectMode === 'existing' ? projectPath : undefined);
     setInput('');
   }

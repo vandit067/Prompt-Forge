@@ -9,13 +9,22 @@ app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 
 function rowToTask(row) {
+  let projectContext;
+  if (row.project_context) {
+    try {
+      projectContext = JSON.parse(row.project_context);
+    } catch {
+      projectContext = undefined;
+    }
+  }
+
   return {
     id:               row.id,
     title:            row.title,
     input:            row.input,
     taskType:         row.task_type,
     projectPath:      row.project_path ?? undefined,
-    projectContext:   row.project_context ?? undefined,
+    projectContext:   projectContext,
     status:           row.status,
     errorNotes:       row.error_notes ?? undefined,
     generatedPrompts: JSON.parse(row.generated_prompts),
@@ -112,7 +121,7 @@ app.post('/api/generate', async (req, res) => {
       input: task.input,
       task_type: task.taskType,
       project_path: task.projectPath ?? null,
-      project_context: null,
+      project_context: projectContext ? JSON.stringify(projectContext) : null,
       status: task.status,
       generated_prompts: JSON.stringify(task.generatedPrompts),
       generated_files: JSON.stringify(task.generatedFiles),
@@ -139,7 +148,7 @@ app.post('/api/generate', async (req, res) => {
         input: task.input,
         task_type: task.taskType,
         project_path: task.projectPath ?? null,
-        project_context: null,
+        project_context: projectContext ? JSON.stringify(projectContext) : null,
         status: task.status,
         generated_prompts: JSON.stringify(task.generatedPrompts),
         generated_files: JSON.stringify(task.generatedFiles),
@@ -194,6 +203,33 @@ app.patch('/api/tasks/:id', (req, res) => {
     });
     if (status === 'error' && errorNotes) {
       stmts.insertFailure.run(req.params.id, 'user_reported', errorNotes);
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/settings — get all user settings
+app.get('/api/settings', (_req, res) => {
+  try {
+    const rows = stmts.getAllSettings.all();
+    const settings = rows.reduce((acc, row) => {
+      acc[row.key] = row.value;
+      return acc;
+    }, {});
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/settings — save user settings
+app.post('/api/settings', (req, res) => {
+  const settings = req.body;
+  try {
+    for (const [key, value] of Object.entries(settings)) {
+      stmts.setSetting.run(key, String(value));
     }
     res.json({ ok: true });
   } catch (err) {

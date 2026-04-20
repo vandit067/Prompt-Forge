@@ -29,6 +29,10 @@ db.exec(`
     updated_at      TEXT NOT NULL
   );
 
+  CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_tasks_task_type ON tasks(task_type);
+  CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+
   CREATE TABLE IF NOT EXISTS failures (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id     TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
@@ -36,6 +40,9 @@ db.exec(`
     notes       TEXT,
     created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
   );
+
+  CREATE INDEX IF NOT EXISTS idx_failures_task_id ON failures(task_id);
+  CREATE INDEX IF NOT EXISTS idx_failures_created_at ON failures(created_at DESC);
 
   CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
@@ -83,6 +90,7 @@ export const stmts = {
 
   getSetting: db.prepare(`SELECT value FROM settings WHERE key = ?`),
   setSetting: db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`),
+  getAllSettings: db.prepare(`SELECT key, value FROM settings`),
 };
 
 export default db;

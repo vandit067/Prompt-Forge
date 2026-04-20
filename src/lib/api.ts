@@ -24,4 +24,13 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ status, errorNotes }),
     }),
+
+  getSettings: () =>
+    request<Record<string, string>>('/api/settings'),
+
+  saveSettings: (settings: Record<string, string>) =>
+    request<{ ok: boolean }>('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    }),
 };

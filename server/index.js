@@ -102,16 +102,21 @@ app.post('/api/scan-project', async (req, res) => {
 
 // POST /api/generate — generate a new task spec locally
 app.post('/api/generate', async (req, res) => {
+  console.log('[generate] Request received');
   const { input, projectPath, projectContext } = req.body;
 
   if (!input?.trim()) {
+    console.log('[generate] No input provided');
     return res.status(400).json({ error: 'input required' });
   }
 
   try {
+    console.log('[generate] Generating task spec...');
     // Generate task spec locally (no API calls, no CLI)
     const task = generateLocalTask(input, projectPath, projectContext);
+    console.log('[generate] Task generated:', task.id);
 
+    console.log('[generate] Saving to database...');
     // Save to database
     stmts.insertTask.run({
       id: task.id,
@@ -128,10 +133,13 @@ app.post('/api/generate', async (req, res) => {
       created_at: task.createdAt,
       updated_at: task.updatedAt,
     });
+    console.log('[generate] Saved to database');
 
+    console.log('[generate] Sending response...');
     res.json(task);
+    console.log('[generate] Response sent');
   } catch (err) {
-    console.error('Error in /api/generate:', err.message);
+    console.error('[generate] Error:', err.message, err.stack);
     res.status(500).json({
       error: err.message || 'Generation failed',
     });

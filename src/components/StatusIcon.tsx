@@ -1,4 +1,5 @@
 import { CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { colors } from '../lib/designSystem';
 import type { TaskStatus } from '../types';
 
 interface Props {
@@ -7,7 +8,7 @@ interface Props {
 }
 
 export function StatusIcon({ status, size = 14 }: Props) {
-  if (status === 'success') return <CheckCircle2 size={size} color="#22c55e" />;
-  if (status === 'error')   return <XCircle size={size} color="#ef4444" />;
-  return <Clock size={size} color="#71717a" />;
+  if (status === 'success') return <CheckCircle2 size={size} color={colors.success} />;
+  if (status === 'error')   return <XCircle size={size} color={colors.error} />;
+  return <Clock size={size} color={colors.fgMuted} />;
 }

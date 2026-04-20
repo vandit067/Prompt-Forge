@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { colors, fonts, radius, transitions } from '../lib/designSystem';
 
 interface Props {
   text: string;
@@ -26,21 +27,21 @@ export function CopyButton({ text, className = '' }: Props) {
         alignItems: 'center',
         gap: '5px',
         padding: '5px 10px',
-        borderRadius: '6px',
-        border: '1px solid #1c1c22',
-        background: copied ? '#14532d' : '#18181b',
-        color: copied ? '#86efac' : '#71717a',
+        borderRadius: radius.md,
+        border: `1px solid ${colors.border}`,
+        background: copied ? colors.successBg : colors.bgInput,
+        color: copied ? colors.success : colors.fgMuted,
         fontSize: '11px',
-        fontFamily: '"JetBrains Mono", monospace',
+        fontFamily: fonts.mono,
         cursor: 'pointer',
-        transition: 'all 0.15s',
+        transition: transitions.fast,
         whiteSpace: 'nowrap',
       }}
       onMouseEnter={e => {
-        if (!copied) (e.currentTarget as HTMLButtonElement).style.color = '#fafafa';
+        if (!copied) (e.currentTarget as HTMLButtonElement).style.color = colors.fg;
       }}
       onMouseLeave={e => {
-        if (!copied) (e.currentTarget as HTMLButtonElement).style.color = '#71717a';
+        if (!copied) (e.currentTarget as HTMLButtonElement).style.color = colors.fgMuted;
       }}
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}

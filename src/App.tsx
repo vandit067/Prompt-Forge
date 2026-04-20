@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { CommandCenter, TaskDetail } from './screens/CommandCenter';
 import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
+import { colors } from './lib/designSystem';
 import { api } from './lib/api';
 import { generateTask, scanProject, getFailureCount, CliNotInstalledError, GenerationCancelledError } from './services/claude-cli';
 import { classifyTask } from './data/generators';
@@ -203,7 +204,7 @@ export default function App() {
       style={{
         display: 'flex',
         height: '100vh',
-        background: '#09090b',
+        background: colors.bg,
         overflow: 'hidden',
         fontFamily: '"Inter", system-ui, -apple-system, sans-serif',
       }}

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { stmts } from './db.js';
 import { spawnClaude, buildTask, buildFallbackTask } from './claude-cli.js';
+import { generateViaAPI } from './claude-api.js';
 import { scanProject } from './project-scanner.js';
 
 const app = express();
@@ -133,15 +134,21 @@ app.post('/api/generate', async (req, res) => {
       }
     }
 
-    console.log('Calling spawnClaude...');
-    const parsed = await spawnClaude(input, {
-      onAbort: (fn) => {
-        kill = fn;
-      },
-      projectContext: projectContext?.promptBlock,
-      knownIssues,
-    });
-    console.log('spawnClaude returned successfully');
+    console.log('Attempting API generation...');
+    let parsed;
+    try {
+      parsed = await generateViaAPI(input, {
+        projectContext: projectContext?.promptBlock,
+        knownIssues,
+      });
+      console.log('API generation succeeded');
+    } catch (apiErr) {
+      console.error('API generation failed:', apiErr.code);
+      if (!process.env.ANTHROPIC_API_KEY) {
+        return res.status(422).json({ error: 'API_KEY_NOT_SET' });
+      }
+      throw apiErr;
+    }
     responseStarted = true;
 
     const task = buildTask(parsed, input, projectPath, projectContext);
@@ -164,14 +171,11 @@ app.post('/api/generate', async (req, res) => {
     res.json(task);
   } catch (err) {
     console.error('Error in /api/generate:', err.code, err.message || err);
-    if (err.code === 'CANCELLED') {
-      console.error('Process was cancelled');
-      return res.status(499).json({ error: 'cancelled' });
+
+    if (err.code === 'API_KEY_NOT_SET') {
+      return res.status(422).json({ error: 'API_KEY_NOT_SET' });
     }
-    if (err.code === 'CLI_NOT_INSTALLED') {
-      console.error('CLI not installed');
-      return res.status(422).json({ error: 'CLI_NOT_INSTALLED' });
-    }
+
     if (err.code === 'PARSE_ERROR') {
       console.error('Parse error, using fallback');
       // Fallback: output raw response as a single prompt
@@ -193,6 +197,17 @@ app.post('/api/generate', async (req, res) => {
       });
       return res.json(task);
     }
+
+    if (err.code === 'CANCELLED') {
+      console.error('Process was cancelled');
+      return res.status(499).json({ error: 'cancelled' });
+    }
+
+    if (err.code === 'CLI_NOT_INSTALLED') {
+      console.error('CLI not installed');
+      return res.status(422).json({ error: 'CLI_NOT_INSTALLED' });
+    }
+
     console.error('Returning 500 error:', err.code, err.message);
     res.status(500).json({
       error: err.message || 'Generation failed',

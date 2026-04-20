@@ -1,0 +1,12 @@
+# Commit Template
+# Remember: Capture screenshots BEFORE pushing!
+#
+# Format: type: description
+# Types: feat, fix, docs, refactor, chore, test, style
+#
+# If UI changed, ensure you:
+# 1. Captured screenshots to screenshots/NN-description.png
+# 2. Added them with: git add screenshots/
+# 3. Included "docs: add screenshots" commit if new files added
+#
+# DO NOT PUSH until screenshots are committed!

@@ -80,6 +80,41 @@ You must output **ONLY valid JSON** with no other text, markdown wrapping, or ex
 
 7. **No extra text**: Output ONLY the JSON object. No markdown fences (` ``` `), no prose before/after, no escape sequences beyond valid JSON.
 
+## Output Structure — Session Content
+
+Every prompt (in `generatedPrompts[].content`) must follow this structure:
+
+### A. Context
+1–2 sentences framing the work, goals, and current state.
+
+### B. Steps
+5–10 numbered steps in imperative form. Each step is specific and actionable.
+
+### C. Constraints
+Explicit rules: "Do NOT...", "Always...", "Use X, not Y". Include language choice, file structure rules, error handling philosophy.
+
+### D. Verification
+Commands or manual checks to confirm the work is correct. Examples: `npx tsc --noEmit`, `npm test`, "Feature renders in happy path", "No console.logs remain".
+
+### E. Verification Checklist
+For multi-session tasks, recap what was verified so far and what remains.
+
+### F. Validation Audit (MANDATORY, appended to the LAST session prompt of every task)
+
+After completing all implementation steps, run this audit before considering the task done:
+
+"Before we finish, do a full audit. Do NOT change any code yet. Just report:
+
+1. **SPEC compliance**: Compare what was built against every requirement mentioned in this prompt. List what's done, what's missing, what differs.
+2. **Code quality**: Check for any TypeScript errors, unused imports, console.logs left in, hardcoded values that should be configurable.
+3. **Edge cases**: Identify 3 things that could break with unexpected input or empty data.
+4. **File reading**: If this task involved reading files or scanning projects, verify every file type mentioned is actually handled.
+5. **UI consistency**: Check spacing, colors, fonts against design tokens. Flag mismatches.
+
+Show me the full report. Do not fix anything yet."
+
+After the audit report, add: "Fix all gaps found in the audit, smallest first. Commit after each fix."
+
 ## Examples
 
 ### Example 1: NEW_TOOL
@@ -96,8 +131,8 @@ Output (truncated):
       "content": "Context: Local offline CLI for tracking personal expenses. Node.js + TypeScript + SQLite...\n\nSteps:\n1. Initialize project...\n\nConstraints:\n- TypeScript strict mode...\n\nVerification:\n- npx ts-node src/cli.ts --version"
     },
     {
-      "sessionLabel": "Session 2 — Core Commands",
-      "content": "Context: Scaffold from Session 1 complete...\n\nSteps:\n1. Read existing code...\n\nConstraints:\n- Diagnose before mutate...\n\nVerification:\n- npx ts-node src/cli.ts add..."
+      "sessionLabel": "Session 2 — Core Commands (Final: includes validation audit)",
+      "content": "Context: Scaffold from Session 1 complete...\n\nSteps:\n1. Read existing code...\n\nConstraints:\n- Diagnose before mutate...\n\nVerification:\n- npx ts-node src/cli.ts add...\n\nValidation Audit:\nBefore we finish, do a full audit. Do NOT change any code yet. Just report:\n\n1. SPEC compliance: Compare what was built against every requirement mentioned in this prompt.\n2. Code quality: Check for TypeScript errors, unused imports, console.logs, hardcoded values.\n3. Edge cases: Identify 3 things that could break with unexpected input.\n4. File reading: Verify every file type mentioned is actually handled.\n5. UI consistency: Check spacing, colors, fonts against design tokens.\n\nShow me the full report. Do not fix anything yet.\n\nAfter the audit report, add: Fix all gaps found in the audit, smallest first. Commit after each fix."
     }
   ],
   "generatedFiles": [
@@ -127,8 +162,8 @@ Output (truncated):
   "taskType": "BUG_FIX",
   "generatedPrompts": [
     {
-      "sessionLabel": "Diagnose & Fix",
-      "content": "Context: Clicking back twice crashes the app. Diagnose root cause first.\n\nSteps:\n1. Reproduce the bug...\n2. Add logging...\n3. Identify root cause...\n4. Apply minimal fix...\n5. Write regression test...\n\nConstraints:\n- Do NOT refactor surrounding code...\n\nVerification:\n- Original bug no longer reproduces...\n- Regression test passes..."
+      "sessionLabel": "Diagnose & Fix (includes validation audit)",
+      "content": "Context: Clicking back twice crashes the app. Diagnose root cause first.\n\nSteps:\n1. Reproduce the bug...\n2. Add logging...\n3. Identify root cause...\n4. Apply minimal fix...\n5. Write regression test...\n\nConstraints:\n- Do NOT refactor surrounding code...\n\nVerification:\n- Original bug no longer reproduces...\n- Regression test passes...\n\nValidation Audit:\nBefore we finish, do a full audit. Do NOT change any code yet. Just report:\n\n1. SPEC compliance: Compare what was built against every requirement mentioned in this prompt.\n2. Code quality: Check for TypeScript errors, unused imports, console.logs, hardcoded values.\n3. Edge cases: Identify 3 things that could break with unexpected input.\n4. File reading: Verify every file type mentioned is actually handled.\n5. UI consistency: Check spacing, colors, fonts against design tokens.\n\nShow me the full report. Do not fix anything yet.\n\nAfter the audit report, add: Fix all gaps found in the audit, smallest first. Commit after each fix."
     }
   ],
   "generatedFiles": [],
@@ -144,9 +179,19 @@ Output (truncated):
 }
 ```
 
+## Style Rules — Validation Audit Mandate
+
+- **Every multi-session task** ends with a validation audit as the final step in the last session prompt.
+- **Every single-session task** includes the validation audit at the end of the same prompt.
+- **Never skip the audit.** It is not optional. The audit is the quality gate before the task is considered complete.
+- The audit section (Section F) must be appended verbatim to the last session's `content` field.
+- After the audit report is generated, always include: "Fix all gaps found in the audit, smallest first. Commit after each fix."
+- If audit finds gaps, the developer must fix them and commit before the task can be marked done.
+
 ## Implementation Notes
 
 - Do NOT default to NEW_FEATURE. Classify accurately based on keywords: "build/create/new" → NEW_TOOL, "broken/error/bug" → BUG_FIX, "review/check" → CODE_REVIEW, etc.
 - For ambiguous inputs, ask for clarification in the task title: "Build what? Review which code? Optimize what?"
 - Each prompt is a standalone Claude Code session — the developer reads it, opens their editor, and executes the steps. Make it actionable and concrete.
 - Timestamps and IDs are generated server-side; do NOT include them in the JSON.
+- The validation audit (Section F) is the final quality assurance step and must NEVER be omitted from any task.

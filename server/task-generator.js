@@ -1,4 +1,4 @@
-import { v4 as uuid } from 'crypto';
+import crypto from 'crypto';
 
 // Simple task type classification based on keywords
 function classifyTaskType(input) {
@@ -29,7 +29,7 @@ function generateTitle(input) {
 // Generate task specifications using templates
 function generateTaskSpec(input, taskType) {
   const title = generateTitle(input);
-  const id = uuid().slice(0, 8);
+  const id = crypto.randomUUID().slice(0, 8);
 
   // Template-based prompt generation
   const prompts = generatePrompts(input, taskType);

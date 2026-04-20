@@ -32,8 +32,8 @@ export async function spawnClaude(userInput, { onAbort, projectContext, knownIss
 
   return new Promise((resolve, reject) => {
     console.log('Spawning claude with prompt length:', prompt.length);
-    const proc = spawn('claude', ['-p', prompt], {
-      stdio: ['ignore', 'pipe', 'pipe'],
+    const proc = spawn('claude', ['--print'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 120000, // 2 min timeout
     });
 
@@ -41,6 +41,10 @@ export async function spawnClaude(userInput, { onAbort, projectContext, knownIss
 
     let stdout = '';
     let stderr = '';
+
+    // Send prompt via stdin
+    proc.stdin.write(prompt);
+    proc.stdin.end();
 
     proc.stdout.on('data', (d) => {
       stdout += d.toString();

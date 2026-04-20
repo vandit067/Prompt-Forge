@@ -1,8 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { stmts } from './db.js';
-import { spawnClaude, buildTask, buildFallbackTask } from './claude-cli.js';
-import { generateViaAPI } from './claude-api.js';
+import { generateLocalTask } from './task-generator.js';
 import { scanProject } from './project-scanner.js';
 
 const app = express();
@@ -101,64 +100,26 @@ app.post('/api/scan-project', async (req, res) => {
   }
 });
 
-// POST /api/generate — generate a new task via Claude Code CLI
+// POST /api/generate — generate a new task spec locally
 app.post('/api/generate', async (req, res) => {
-  console.log('POST /api/generate received');
-  const { input, projectPath, projectContext, taskType } = req.body;
-  console.log('Input length:', input?.length, 'Task type:', taskType);
+  const { input, projectPath, projectContext } = req.body;
 
   if (!input?.trim()) {
     return res.status(400).json({ error: 'input required' });
   }
 
-  let kill = null;
-  let responseStarted = false;
-
-  req.on('close', () => {
-    console.log('Request closed by client');
-    if (kill && !responseStarted) {
-      console.log('Killing Claude process because request closed');
-      kill();
-    }
-  });
-
   try {
-    console.log('Building known issues block...');
-    // Build known issues block from past failures
-    let knownIssues = null;
-    if (taskType) {
-      const failures = stmts.getFailuresByTaskType.all(taskType);
-      if (failures.length > 0) {
-        const notes = failures.map(f => `- ${f.notes}`).join('\n');
-        knownIssues = `KNOWN ISSUES FOR ${taskType}:\n${notes}\n\nAvoid these patterns in your output.`;
-      }
-    }
+    // Generate task spec locally (no API calls, no CLI)
+    const task = generateLocalTask(input, projectPath, projectContext);
 
-    console.log('Attempting API generation...');
-    let parsed;
-    try {
-      parsed = await generateViaAPI(input, {
-        projectContext: projectContext?.promptBlock,
-        knownIssues,
-      });
-      console.log('API generation succeeded');
-    } catch (apiErr) {
-      console.error('API generation failed:', apiErr.code);
-      if (!process.env.ANTHROPIC_API_KEY) {
-        return res.status(422).json({ error: 'API_KEY_NOT_SET' });
-      }
-      throw apiErr;
-    }
-    responseStarted = true;
-
-    const task = buildTask(parsed, input, projectPath, projectContext);
+    // Save to database
     stmts.insertTask.run({
       id: task.id,
       title: task.title,
       input: task.input,
       task_type: task.taskType,
       project_path: task.projectPath ?? null,
-      project_context: projectContext ? JSON.stringify(projectContext) : null,
+      project_context: task.projectContext ? JSON.stringify(task.projectContext) : null,
       status: task.status,
       generated_prompts: JSON.stringify(task.generatedPrompts),
       generated_files: JSON.stringify(task.generatedFiles),
@@ -170,48 +131,9 @@ app.post('/api/generate', async (req, res) => {
 
     res.json(task);
   } catch (err) {
-    console.error('Error in /api/generate:', err.code, err.message || err);
-
-    if (err.code === 'API_KEY_NOT_SET') {
-      return res.status(422).json({ error: 'API_KEY_NOT_SET' });
-    }
-
-    if (err.code === 'PARSE_ERROR') {
-      console.error('Parse error, using fallback');
-      // Fallback: output raw response as a single prompt
-      const task = buildFallbackTask(input, err.raw, projectPath, projectContext);
-      stmts.insertTask.run({
-        id: task.id,
-        title: task.title,
-        input: task.input,
-        task_type: task.taskType,
-        project_path: task.projectPath ?? null,
-        project_context: projectContext ? JSON.stringify(projectContext) : null,
-        status: task.status,
-        generated_prompts: JSON.stringify(task.generatedPrompts),
-        generated_files: JSON.stringify(task.generatedFiles),
-        generated_plan: JSON.stringify(task.generatedPlan),
-        generated_checklist: JSON.stringify(task.generatedChecklist),
-        created_at: task.createdAt,
-        updated_at: task.updatedAt,
-      });
-      return res.json(task);
-    }
-
-    if (err.code === 'CANCELLED') {
-      console.error('Process was cancelled');
-      return res.status(499).json({ error: 'cancelled' });
-    }
-
-    if (err.code === 'CLI_NOT_INSTALLED') {
-      console.error('CLI not installed');
-      return res.status(422).json({ error: 'CLI_NOT_INSTALLED' });
-    }
-
-    console.error('Returning 500 error:', err.code, err.message);
+    console.error('Error in /api/generate:', err.message);
     res.status(500).json({
       error: err.message || 'Generation failed',
-      code: err.code,
     });
   }
 });

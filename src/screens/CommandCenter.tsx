@@ -453,6 +453,582 @@ function ContextRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/* ─── Hardcoded fake output data ─── */
+
+interface FakeStep {
+  text: string;
+  command?: string;
+}
+
+interface FakeSection {
+  type: 'context' | 'steps' | 'constraints' | 'verification';
+  text?: string;
+  items?: FakeStep[];
+}
+
+interface FakePrompt {
+  id: string;
+  sessionLabel: string;
+  fullText: string;
+  sections: FakeSection[];
+}
+
+const FAKE_PROMPTS: FakePrompt[] = [
+  {
+    id: 'fp-1',
+    sessionLabel: 'Session 1 — Scaffold & Storage',
+    fullText: `Context: Building a local CLI expense tracker. Node.js + TypeScript + SQLite for local storage.
+
+Steps:
+1. Initialize project: mkdir expense-tracker && cd expense-tracker && npm init -y
+2. Install runtime deps: npm install better-sqlite3 commander chalk date-fns
+3. Install dev deps: npm install -D typescript @types/node @types/better-sqlite3 ts-node
+4. Create src/db.ts — SQLite setup with expenses table (id, amount, category, note, date)
+5. Create src/cli.ts — Commander.js entry point with --version flag
+
+Constraints:
+- TypeScript strict mode, no \`any\`
+- Data stored in ~/.expense-tracker/data.db — never in the project dir
+- No network requests — fully offline
+
+Verification:
+- npx ts-node src/cli.ts --version
+- npx ts-node src/cli.ts add 12.50 food "Lunch"
+- npx tsc --noEmit`,
+    sections: [
+      {
+        type: 'context',
+        text: 'Building a local CLI expense tracker. Node.js + TypeScript + SQLite for local storage. No network, no cloud, no paid APIs.',
+      },
+      {
+        type: 'steps',
+        items: [
+          { text: 'Initialize project', command: 'mkdir expense-tracker && cd expense-tracker && npm init -y' },
+          { text: 'Install runtime dependencies', command: 'npm install better-sqlite3 commander chalk date-fns' },
+          { text: 'Install dev dependencies', command: 'npm install -D typescript @types/node @types/better-sqlite3 ts-node' },
+          { text: 'Create src/db.ts — SQLite setup with expenses table: id, amount, category, note, date' },
+          { text: 'Create src/cli.ts — Commander.js entry point with --version flag' },
+        ],
+      },
+      {
+        type: 'constraints',
+        items: [
+          { text: 'TypeScript strict mode, no `any`' },
+          { text: 'Data stored in ~/.expense-tracker/data.db — never in the project dir' },
+          { text: 'No network requests — fully offline' },
+        ],
+      },
+      {
+        type: 'verification',
+        items: [
+          { text: 'CLI is wired up', command: 'npx ts-node src/cli.ts --version' },
+          { text: 'Test add command', command: 'npx ts-node src/cli.ts add 12.50 food "Lunch"' },
+          { text: 'Zero type errors', command: 'npx tsc --noEmit' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'fp-2',
+    sessionLabel: 'Session 2 — Core Commands',
+    fullText: `Context: Scaffold and DB from Session 1 working. Adding add, list, summary, delete commands.
+
+Steps:
+1. Read src/db.ts and src/cli.ts — understand existing structure before changing anything
+2. Add \`add <amount> <category> [note]\` — validates amount > 0, inserts row, prints ID
+3. Add \`list [--month YYYY-MM]\` — queries DB, renders chalk table, defaults to current month
+4. Add \`summary [--month YYYY-MM]\` — GROUP BY category, show per-category totals
+5. Add \`delete <id>\` — y/n confirmation before deleting
+
+Constraints:
+- Validate amount is a positive number — exit code 1 with clear message if not
+- Default --month to current month using date-fns format
+- Diagnose before mutate — read existing code before adding each command
+
+Verification:
+- npx ts-node src/cli.ts add 45.00 transport "Uber"
+- npx ts-node src/cli.ts list --month 2026-04
+- npx ts-node src/cli.ts summary`,
+    sections: [
+      {
+        type: 'context',
+        text: 'Scaffold and DB from Session 1 are working. Now adding the core add, list, summary, and delete commands with validation.',
+      },
+      {
+        type: 'steps',
+        items: [
+          { text: 'Read src/db.ts and src/cli.ts — understand existing structure before touching anything' },
+          { text: 'Add `add <amount> <category> [note]` — validate amount > 0, insert row, print ID' },
+          { text: 'Add `list [--month YYYY-MM]` — query DB, render chalk table, default to current month' },
+          { text: 'Add `summary [--month YYYY-MM]` — GROUP BY category, show totals per category' },
+          { text: 'Add `delete <id>` — prompt y/n confirmation before deleting' },
+        ],
+      },
+      {
+        type: 'constraints',
+        items: [
+          { text: 'amount must be a positive number — exit 1 with helpful message if not' },
+          { text: 'Default --month to current month (use date-fns to format)' },
+          { text: 'Diagnose before mutate — read all existing code before adding each command' },
+        ],
+      },
+      {
+        type: 'verification',
+        items: [
+          { text: 'Add an expense', command: 'npx ts-node src/cli.ts add 45.00 transport "Uber"' },
+          { text: 'List this month', command: 'npx ts-node src/cli.ts list --month 2026-04' },
+          { text: 'Show category summary', command: 'npx ts-node src/cli.ts summary' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'fp-3',
+    sessionLabel: 'Session 3 — CSV Export & Categories',
+    fullText: `Context: add/list/summary working. Adding CSV export and category management.
+
+Steps:
+1. Read src/cli.ts — understand current command layout
+2. Add \`export [--month YYYY-MM] [--output path]\` — query → format CSV → write file
+3. Default output path: ~/expense-export-YYYY-MM.csv
+4. Add \`categories list\` and \`categories add <name>\` subcommands
+5. Test the export end-to-end
+
+Constraints:
+- CSV header row must be: id,date,amount,category,note
+- Never overwrite existing file without --force flag
+- Categories in a separate table, referenced by name
+
+Verification:
+- npx ts-node src/cli.ts export --month 2026-04 --output ./test.csv
+- cat ./test.csv
+- npx ts-node src/cli.ts categories list`,
+    sections: [
+      {
+        type: 'context',
+        text: 'Core add/list/summary commands work. Adding CSV export and category management subcommands.',
+      },
+      {
+        type: 'steps',
+        items: [
+          { text: 'Read src/cli.ts — understand current command layout before adding' },
+          { text: 'Add `export [--month] [--output]` — query → format CSV → write file' },
+          { text: 'Default output path: ~/expense-export-YYYY-MM.csv' },
+          { text: 'Add `categories list` and `categories add <name>` subcommands' },
+          { text: 'Test export end-to-end', command: 'npx ts-node src/cli.ts export --month 2026-04 --output ./april.csv' },
+        ],
+      },
+      {
+        type: 'constraints',
+        items: [
+          { text: 'CSV header row: id,date,amount,category,note' },
+          { text: 'Never overwrite existing file without --force flag' },
+          { text: 'Categories live in a separate table, referenced by name' },
+        ],
+      },
+      {
+        type: 'verification',
+        items: [
+          { text: 'Export to file', command: 'npx ts-node src/cli.ts export --month 2026-04 --output ./test.csv' },
+          { text: 'Inspect header row', command: 'cat ./test.csv' },
+          { text: 'List categories', command: 'npx ts-node src/cli.ts categories list' },
+        ],
+      },
+    ],
+  },
+];
+
+const FAKE_FILES = [
+  {
+    filename: 'SPEC.md',
+    content: `# Expense Tracker CLI — SPEC
+
+## Purpose
+A fully local, offline CLI tool for tracking personal expenses with categories,
+monthly summaries, and CSV export. No cloud, no accounts, no paid APIs.
+
+## Tech Stack
+- Node.js 20 + TypeScript 5 (strict)
+- Commander.js   — CLI argument parsing
+- better-sqlite3 — local SQLite (~/.expense-tracker/data.db)
+- chalk          — terminal output formatting
+- date-fns       — date parsing and formatting
+
+## Commands
+\`\`\`
+add <amount> <category> [note]           Add an expense
+list [--month YYYY-MM]                   List expenses, newest first
+summary [--month YYYY-MM]                Category totals for the month
+export [--month YYYY-MM] [--output path] Export to CSV
+categories list                          Show all categories
+categories add <name>                    Add a category
+delete <id>                              Delete an expense (with confirmation)
+\`\`\`
+
+## Data Location
+~/.expense-tracker/data.db  (auto-created on first run)
+Never written to the project directory.
+
+## Build Order
+1. Scaffold + DB setup + add command
+2. list, summary, delete commands
+3. CSV export + category management
+4. Budget alerts + recurring entries`,
+  },
+  {
+    filename: 'CLAUDE.md',
+    content: `# CLAUDE.md — Expense Tracker Rules
+
+Read SPEC.md before any task.
+
+## Rules
+- TypeScript strict mode — no \`any\`
+- Diagnose before mutate — read existing code first
+- One command per session
+- Data goes to ~/.expense-tracker/ only — never the project dir
+- No network requests, no paid APIs
+
+## Code Structure
+\`\`\`
+src/
+  cli.ts     — Commander.js program + command definitions
+  db.ts      — SQLite setup, schema, query helpers
+  format.ts  — chalk-based table and summary renderers
+  export.ts  — CSV generation logic
+\`\`\`
+
+## Input Validation
+- amount: positive finite number — exit 1 with message if not
+- category: must exist in categories table
+- date: defaults to today, accepts YYYY-MM-DD
+
+## Error Handling
+- Invalid input → specific error + exit code 1
+- Missing DB → auto-create schema on first run
+- File conflict → require --force to overwrite`,
+  },
+];
+
+const FAKE_PLAN = [
+  { session: 1, title: 'Scaffold & Storage',         description: 'Project init, SQLite schema, Commander.js entry point', estimatedTime: '30 min' },
+  { session: 2, title: 'Core Commands',              description: 'add, list, summary, delete with input validation',       estimatedTime: '40 min' },
+  { session: 3, title: 'CSV Export & Categories',    description: 'export command, category subcommands, --force flag',     estimatedTime: '30 min' },
+  { session: 4, title: 'Budget Alerts',              description: 'Per-category monthly budgets and threshold warnings',    estimatedTime: '25 min' },
+];
+
+const FAKE_CHECKLIST = [
+  'npx ts-node src/cli.ts --version → prints version without error',
+  'npx ts-node src/cli.ts add 12.50 food "Lunch" → row inserted, ID printed',
+  'npx ts-node src/cli.ts list --month 2026-04 → table renders with correct data',
+  'npx ts-node src/cli.ts summary → category totals sum to total spend',
+  'npx ts-node src/cli.ts export --output ./test.csv → file created',
+  'cat ./test.csv → first line is: id,date,amount,category,note',
+  'npx tsc --noEmit → zero TypeScript errors',
+];
+
+/* ─── Tab content components ─── */
+
+function CommandLine({ command }: { command: string }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '10px',
+        background: '#0a0a0d',
+        border: '1px solid #1c1c22',
+        borderRadius: '6px',
+        padding: '7px 10px',
+        marginTop: '4px',
+      }}
+    >
+      <code
+        style={{
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: '11px',
+          color: '#86efac',
+          wordBreak: 'break-all',
+          flex: 1,
+        }}
+      >
+        $ {command}
+      </code>
+      <CopyButton text={command} />
+    </div>
+  );
+}
+
+function SectionLabel({ type }: { type: FakeSection['type'] }) {
+  const COLOR: Record<FakeSection['type'], string> = {
+    context:      '#71717a',
+    steps:        '#3b82f6',
+    constraints:  '#f59e0b',
+    verification: '#22c55e',
+  };
+  return (
+    <div
+      style={{
+        fontSize: '10px',
+        fontFamily: '"JetBrains Mono", monospace',
+        fontWeight: 700,
+        letterSpacing: '0.08em',
+        textTransform: 'uppercase',
+        color: COLOR[type],
+        marginBottom: '8px',
+      }}
+    >
+      {type}
+    </div>
+  );
+}
+
+function PromptsTab() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {FAKE_PROMPTS.map(prompt => (
+        <div
+          key={prompt.id}
+          style={{ background: '#0a0a0d', border: '1px solid #1c1c22', borderRadius: '8px', overflow: 'hidden' }}
+        >
+          {/* Session header */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderBottom: '1px solid #1c1c22',
+              background: '#0f0f12',
+            }}
+          >
+            <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#3b82f6', fontWeight: 600 }}>
+              {prompt.sessionLabel}
+            </span>
+            <CopyButton text={prompt.fullText} />
+          </div>
+
+          {/* Sections */}
+          <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {prompt.sections.map((section, si) => (
+              <div key={si}>
+                <SectionLabel type={section.type} />
+
+                {section.type === 'context' && (
+                  <p style={{ margin: 0, fontSize: '12px', color: '#a1a1aa', fontFamily: '"JetBrains Mono", monospace', lineHeight: '1.6' }}>
+                    {section.text}
+                  </p>
+                )}
+
+                {section.type !== 'context' &&
+                  section.items?.map((item, ii) => (
+                    <div key={ii} style={{ marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                        <span style={{ color: '#52525b', fontFamily: '"JetBrains Mono", monospace', fontSize: '11px', flexShrink: 0, minWidth: '18px', paddingTop: '1px' }}>
+                          {section.type === 'steps' ? `${ii + 1}.` : '—'}
+                        </span>
+                        <span style={{ fontSize: '12px', color: '#a1a1aa', fontFamily: '"JetBrains Mono", monospace', lineHeight: '1.6' }}>
+                          {item.text}
+                        </span>
+                      </div>
+                      {item.command && <div style={{ marginLeft: '26px' }}><CommandLine command={item.command} /></div>}
+                    </div>
+                  ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FilesTab() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {FAKE_FILES.map(file => (
+        <div
+          key={file.filename}
+          style={{ background: '#0a0a0d', border: '1px solid #1c1c22', borderRadius: '8px', overflow: 'hidden' }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderBottom: '1px solid #1c1c22',
+              background: '#0f0f12',
+            }}
+          >
+            <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#22c55e', fontWeight: 600 }}>
+              📄 {file.filename}
+            </span>
+            <CopyButton text={file.content} />
+          </div>
+          <pre
+            style={{
+              margin: 0,
+              padding: '14px',
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: '11px',
+              lineHeight: '1.7',
+              color: '#d4d4d8',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              maxHeight: '380px',
+              overflowY: 'auto',
+            }}
+          >
+            {file.content}
+          </pre>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PlanTab() {
+  const totalMins = FAKE_PLAN.reduce((sum, s) => sum + parseInt(s.estimatedTime), 0);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+      {FAKE_PLAN.map((step, i) => (
+        <div key={step.session} style={{ position: 'relative', display: 'flex', gap: '14px', alignItems: 'flex-start', paddingBottom: '8px' }}>
+          {/* Connector line */}
+          {i < FAKE_PLAN.length - 1 && (
+            <div style={{ position: 'absolute', left: '13px', top: '30px', width: '1px', bottom: '0', background: '#1c1c22' }} />
+          )}
+          {/* Circle */}
+          <div
+            style={{
+              width: '28px', height: '28px', borderRadius: '50%',
+              background: '#1e3a5f', border: '1px solid #3b82f6',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, fontSize: '11px', fontFamily: '"JetBrains Mono", monospace',
+              color: '#93c5fd', fontWeight: 700, zIndex: 1,
+            }}
+          >
+            {step.session}
+          </div>
+          {/* Card */}
+          <div
+            style={{
+              flex: 1, background: '#0a0a0d', border: '1px solid #1c1c22',
+              borderRadius: '8px', padding: '10px 14px',
+              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px',
+            }}
+          >
+            <div>
+              <div style={{ fontSize: '13px', color: '#fafafa', fontWeight: 500, marginBottom: '3px' }}>{step.title}</div>
+              <div style={{ fontSize: '11px', color: '#71717a', fontFamily: '"JetBrains Mono", monospace', lineHeight: '1.5' }}>{step.description}</div>
+            </div>
+            <span
+              style={{
+                fontSize: '10px', fontFamily: '"JetBrains Mono", monospace',
+                color: '#52525b', background: '#18181b', border: '1px solid #1c1c22',
+                padding: '3px 8px', borderRadius: '5px', whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              {step.estimatedTime}
+            </span>
+          </div>
+        </div>
+      ))}
+      {/* Total */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', paddingTop: '10px', borderTop: '1px solid #1c1c22', marginTop: '4px' }}>
+        <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>Total estimated:</span>
+        <span style={{ fontSize: '12px', color: '#fafafa', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>~{totalMins} min</span>
+      </div>
+    </div>
+  );
+}
+
+function ChecklistTab() {
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+
+  function toggle(i: number) {
+    setChecked(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  }
+
+  const allText = FAKE_CHECKLIST.join('\n');
+  const uncheckedText = FAKE_CHECKLIST.filter((_, i) => !checked.has(i)).join('\n');
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+          Run these after Claude Code finishes each session
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span
+            style={{
+              fontSize: '11px',
+              fontFamily: '"JetBrains Mono", monospace',
+              color: checked.size === FAKE_CHECKLIST.length ? '#22c55e' : '#71717a',
+            }}
+          >
+            {checked.size}/{FAKE_CHECKLIST.length} done
+          </span>
+          <CopyButton text={checked.size > 0 ? uncheckedText : allText} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {FAKE_CHECKLIST.map((item, i) => (
+          <div
+            key={i}
+            onClick={() => toggle(i)}
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: '10px',
+              padding: '10px 12px',
+              background: checked.has(i) ? '#0d1f0d' : '#0a0a0d',
+              border: `1px solid ${checked.has(i) ? '#14532d' : '#1c1c22'}`,
+              borderRadius: '7px', cursor: 'pointer', transition: 'all 0.12s',
+            }}
+          >
+            {/* Checkbox */}
+            <div
+              style={{
+                width: '16px', height: '16px', borderRadius: '4px',
+                border: `1.5px solid ${checked.has(i) ? '#22c55e' : '#3c3c48'}`,
+                background: checked.has(i) ? '#22c55e' : 'transparent',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0, marginTop: '1px', transition: 'all 0.12s',
+              }}
+            >
+              {checked.has(i) && (
+                <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                  <path d="M1.5 4.5L3.5 6.5L7.5 2.5" stroke="#000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </div>
+            {/* Text */}
+            <span
+              style={{
+                flex: 1, fontSize: '12px', fontFamily: '"JetBrains Mono", monospace',
+                lineHeight: '1.5',
+                color: checked.has(i) ? '#52525b' : '#d4d4d8',
+                textDecoration: checked.has(i) ? 'line-through' : 'none',
+                transition: 'color 0.12s',
+              }}
+            >
+              {item}
+            </span>
+            {/* Per-item copy — stop propagation so it doesn't toggle */}
+            <div onClick={e => e.stopPropagation()}>
+              <CopyButton text={item} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Command Center ─── */
 interface Props {
   onGenerate: (input: string, projectPath?: string) => Promise<void>;
@@ -756,22 +1332,11 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating }: Props) 
           </div>
 
           {/* Tab content */}
-          <div
-            style={{
-              padding: '28px 24px',
-              fontFamily: '"JetBrains Mono", monospace',
-              fontSize: '12px',
-              color: '#52525b',
-              minHeight: '180px',
-              display: 'flex',
-              alignItems: 'center',
-              lineHeight: '1.7',
-            }}
-          >
-            {activeTab === 'prompts'   && 'Prompts will appear here.'}
-            {activeTab === 'files'     && 'Generated files (SPEC.md, CLAUDE.md) will appear here.'}
-            {activeTab === 'plan'      && 'Session plan will appear here.'}
-            {activeTab === 'checklist' && 'Verification checklist will appear here.'}
+          <div style={{ padding: '16px' }}>
+            {activeTab === 'prompts'   && <PromptsTab />}
+            {activeTab === 'files'     && <FilesTab />}
+            {activeTab === 'plan'      && <PlanTab />}
+            {activeTab === 'checklist' && <ChecklistTab />}
           </div>
         </div>
       </div>

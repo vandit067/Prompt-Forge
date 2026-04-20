@@ -37,24 +37,45 @@ export async function spawnClaude(userInput, { onAbort, projectContext, knownIss
       timeout: 120000, // 2 min timeout
     });
 
-    if (onAbort) onAbort(() => proc.kill('SIGTERM'));
+    if (onAbort) onAbort(() => {
+      console.log('Aborting Claude process');
+      proc.kill('SIGTERM');
+    });
 
     let stdout = '';
     let stderr = '';
+    let dataReceived = false;
 
     // Send prompt via stdin
-    proc.stdin.write(prompt);
-    proc.stdin.end();
+    try {
+      proc.stdin.write(prompt);
+      proc.stdin.end();
+      console.log('Prompt sent via stdin');
+    } catch (err) {
+      console.error('Error writing to stdin:', err);
+      reject({ code: 'STDIN_ERROR', message: err.message });
+      return;
+    }
 
     proc.stdout.on('data', (d) => {
+      dataReceived = true;
       stdout += d.toString();
       console.log('stdout data received:', d.toString().slice(0, 100));
     });
 
     proc.stderr.on('data', (d) => {
+      dataReceived = true;
       stderr += d.toString();
       console.log('stderr data received:', d.toString().slice(0, 200));
     });
+
+    // Timeout if no data received after 5 seconds
+    const dataTimeout = setTimeout(() => {
+      if (!dataReceived) {
+        console.error('Claude CLI did not respond within 5 seconds');
+        proc.kill('SIGKILL');
+      }
+    }, 5000);
 
     proc.on('error', (err) => {
       console.error('Process error:', err);
@@ -66,6 +87,7 @@ export async function spawnClaude(userInput, { onAbort, projectContext, knownIss
     });
 
     proc.on('close', (code) => {
+      clearTimeout(dataTimeout);
       console.log('Process closed with code:', code, 'stdout length:', stdout.length, 'stderr:', stderr.slice(0, 200));
       // code === null means process was killed
       if (code === null) {

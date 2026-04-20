@@ -111,9 +111,14 @@ app.post('/api/generate', async (req, res) => {
   }
 
   let kill = null;
+  let responseStarted = false;
+
   req.on('close', () => {
-    console.log('Request closed');
-    if (kill) kill();
+    console.log('Request closed by client');
+    if (kill && !responseStarted) {
+      console.log('Killing Claude process because request closed');
+      kill();
+    }
   });
 
   try {
@@ -137,6 +142,7 @@ app.post('/api/generate', async (req, res) => {
       knownIssues,
     });
     console.log('spawnClaude returned successfully');
+    responseStarted = true;
 
     const task = buildTask(parsed, input, projectPath, projectContext);
     stmts.insertTask.run({

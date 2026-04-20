@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { stmts } from './db.js';
+import { spawnClaude, buildTask, buildFallbackTask } from './claude-cli.js';
 
 const app = express();
 app.use(cors());
@@ -32,6 +33,78 @@ app.get('/api/tasks', (_req, res) => {
     res.json(rows.map(rowToTask));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/generate — generate a new task via Claude Code CLI
+app.post('/api/generate', async (req, res) => {
+  const { input, projectPath } = req.body;
+
+  if (!input?.trim()) {
+    return res.status(400).json({ error: 'input required' });
+  }
+
+  let kill = null;
+  req.on('close', () => {
+    if (kill) kill();
+  });
+
+  try {
+    const parsed = await spawnClaude(input, {
+      onAbort: (fn) => {
+        kill = fn;
+      },
+    });
+
+    const task = buildTask(parsed, input, projectPath);
+    stmts.insertTask.run({
+      id: task.id,
+      title: task.title,
+      input: task.input,
+      task_type: task.taskType,
+      project_path: task.projectPath ?? null,
+      project_context: null,
+      status: task.status,
+      generated_prompts: JSON.stringify(task.generatedPrompts),
+      generated_files: JSON.stringify(task.generatedFiles),
+      generated_plan: JSON.stringify(task.generatedPlan),
+      generated_checklist: JSON.stringify(task.generatedChecklist),
+      created_at: task.createdAt,
+      updated_at: task.updatedAt,
+    });
+
+    res.json(task);
+  } catch (err) {
+    if (err.code === 'CANCELLED') {
+      return res.status(499).json({ error: 'cancelled' });
+    }
+    if (err.code === 'CLI_NOT_INSTALLED') {
+      return res.status(422).json({ error: 'CLI_NOT_INSTALLED' });
+    }
+    if (err.code === 'PARSE_ERROR') {
+      // Fallback: output raw response as a single prompt
+      const task = buildFallbackTask(input, err.raw, projectPath);
+      stmts.insertTask.run({
+        id: task.id,
+        title: task.title,
+        input: task.input,
+        task_type: task.taskType,
+        project_path: task.projectPath ?? null,
+        project_context: null,
+        status: task.status,
+        generated_prompts: JSON.stringify(task.generatedPrompts),
+        generated_files: JSON.stringify(task.generatedFiles),
+        generated_plan: JSON.stringify(task.generatedPlan),
+        generated_checklist: JSON.stringify(task.generatedChecklist),
+        created_at: task.createdAt,
+        updated_at: task.updatedAt,
+      });
+      return res.json(task);
+    }
+    res.status(500).json({
+      error: err.message || 'Generation failed',
+      code: err.code,
+    });
   }
 });
 

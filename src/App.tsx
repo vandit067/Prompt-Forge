@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CommandCenter, TaskDetail } from './screens/CommandCenter';
 import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
-import { generateFakeTask } from './data/generators';
 import { api } from './lib/api';
+import { generateTask, CliNotInstalledError, GenerationCancelledError } from './services/claude-cli';
 import type { Task, Screen } from './types';
 
 export default function App() {
@@ -14,6 +14,8 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveTask, setLiveTask] = useState<Task | null>(null);
   const [dbReady, setDbReady] = useState(false);
+  const [cliError, setCliError] = useState<'not_installed' | 'generation_failed' | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     api.getTasks()
@@ -41,19 +43,39 @@ export default function App() {
   }
 
   async function handleGenerate(input: string, projectPath?: string) {
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setIsGenerating(true);
     setLiveTask(null);
-    setSelectedTaskId(null); // clear any selected task when generating
+    setSelectedTaskId(null);
     setCurrentScreen('command-center');
+    setCliError(null);
 
-    await new Promise(res => setTimeout(res, 1600));
+    try {
+      const task = await generateTask(input, projectPath, controller.signal);
+      setTasks(prev => [task, ...prev]);
+      setLiveTask(task);
+    } catch (err) {
+      if (err instanceof CliNotInstalledError) {
+        setCliError('not_installed');
+      } else if (err instanceof GenerationCancelledError) {
+        // Silent cancel, don't show error
+      } else if (err instanceof Error && err.name === 'AbortError') {
+        // Silent abort, don't show error
+      } else {
+        setCliError('generation_failed');
+        console.error('Generation failed:', err);
+      }
+    } finally {
+      setIsGenerating(false);
+      abortRef.current = null;
+    }
+  }
 
-    const newTask = generateFakeTask(input, projectPath);
-    setTasks(prev => [newTask, ...prev]);
-    setLiveTask(newTask);
+  function handleCancel() {
+    abortRef.current?.abort();
     setIsGenerating(false);
-
-    api.saveTask(newTask).catch(console.error);
   }
 
   async function handleUpdateStatus(taskId: string, status: 'success' | 'error', notes?: string) {
@@ -119,6 +141,9 @@ export default function App() {
             isGenerating={isGenerating}
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
+            onCancel={handleCancel}
+            cliError={cliError}
+            onClearError={() => setCliError(null)}
           />
         );
 
@@ -131,6 +156,9 @@ export default function App() {
             isGenerating={isGenerating}
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
+            onCancel={handleCancel}
+            cliError={cliError}
+            onClearError={() => setCliError(null)}
           />
         );
     }

@@ -359,6 +359,103 @@ function GeneratingState() {
   );
 }
 
+/* ─── CLI Error States ─── */
+function CliNotInstalledBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div
+      style={{
+        background: '#4a2c2c',
+        border: '1px solid #8b4444',
+        borderRadius: '8px',
+        padding: '16px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: '#fca5a5', marginBottom: '6px' }}>
+          Claude Code CLI not found
+        </div>
+        <div style={{ fontSize: '12px', color: '#d4d4d8', lineHeight: '1.5', marginBottom: '8px' }}>
+          Install the CLI to generate real prompts:{' '}
+          <code style={{ background: '#2a1a1a', padding: '2px 6px', borderRadius: '4px' }}>
+            npm install -g @anthropic-ai/claude-code
+          </code>
+        </div>
+        <a
+          href="https://claude.ai/code"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: '12px',
+            color: '#93c5fd',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+          }}
+        >
+          Learn more →
+        </a>
+      </div>
+      <button
+        onClick={onDismiss}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#a1a1aa',
+          cursor: 'pointer',
+          fontSize: '18px',
+          padding: '0 8px',
+          flexShrink: 0,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function GenerationErrorBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div
+      style={{
+        background: '#4a2c2c',
+        border: '1px solid #8b4444',
+        borderRadius: '8px',
+        padding: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: '#fca5a5', marginBottom: '4px' }}>
+          Generation failed
+        </div>
+        <div style={{ fontSize: '12px', color: '#d4d4d8' }}>
+          An error occurred while generating the task. Please try again.
+        </div>
+      </div>
+      <button
+        onClick={onDismiss}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#a1a1aa',
+          cursor: 'pointer',
+          fontSize: '18px',
+          padding: '0 8px',
+          flexShrink: 0,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 /* ─── Project Context Card ─── */
 function ProjectContextCard() {
   const [expanded, setExpanded] = useState(false);
@@ -1036,9 +1133,21 @@ interface Props {
   isGenerating: boolean;
   selectedTask: Task | null;
   onClearSelection: () => void;
+  onCancel?: () => void;
+  cliError?: 'not_installed' | 'generation_failed' | null;
+  onClearError?: () => void;
 }
 
-export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedTask, onClearSelection }: Props) {
+export function CommandCenter({
+  onGenerate,
+  currentTask,
+  isGenerating,
+  selectedTask,
+  onClearSelection,
+  onCancel,
+  cliError,
+  onClearError,
+}: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
@@ -1227,58 +1336,91 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedT
               )}
             </div>
 
-            {/* Submit */}
+            {/* Submit / Cancel */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
-                ⌘↵
-              </span>
-              <button
-                onClick={handleSubmit}
-                disabled={!input.trim() || isGenerating}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 16px',
-                  borderRadius: '7px',
-                  border: 'none',
-                  background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
-                  color: !input.trim() || isGenerating ? '#52525b' : '#000',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.12s',
-                  fontFamily: '"Inter", system-ui, sans-serif',
-                }}
-              >
-                {isGenerating ? (
-                  <>
-                    <div
-                      style={{
-                        width: '12px',
-                        height: '12px',
-                        border: '1.5px solid #52525b',
-                        borderTopColor: '#22c55e',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite',
-                      }}
-                    />
-                    Generating…
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                  </>
-                ) : (
-                  <>
-                    <Send size={13} />
-                    Generate
-                  </>
-                )}
-              </button>
+              {!isGenerating && (
+                <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+                  ⌘↵
+                </span>
+              )}
+              {isGenerating && onCancel ? (
+                <button
+                  onClick={onCancel}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: '#dc2626',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.12s',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                  }}
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  disabled={!input.trim() || isGenerating}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
+                    color: !input.trim() || isGenerating ? '#52525b' : '#000',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.12s',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                  }}
+                >
+                  {isGenerating ? (
+                    <>
+                      <div
+                        style={{
+                          width: '12px',
+                          height: '12px',
+                          border: '1.5px solid #52525b',
+                          borderTopColor: '#22c55e',
+                          borderRadius: '50%',
+                          animation: 'spin 0.8s linear infinite',
+                        }}
+                      />
+                      Generating…
+                      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={13} />
+                      Generate
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Project context (when existing mode) */}
         {projectMode === 'existing' && <ProjectContextCard />}
+
+        {/* CLI Error Banners */}
+        {cliError === 'not_installed' && onClearError && (
+          <CliNotInstalledBanner onDismiss={onClearError} />
+        )}
+        {cliError === 'generation_failed' && onClearError && (
+          <GenerationErrorBanner onDismiss={onClearError} />
+        )}
 
         {/* Tabbed output panel — always visible */}
         {isGenerating ? (

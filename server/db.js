@@ -70,6 +70,17 @@ export const stmts = {
     INSERT INTO failures (task_id, error_type, notes) VALUES (?, ?, ?)
   `),
 
+  getFailuresByTaskType: db.prepare(`
+    SELECT f.notes, f.created_at
+    FROM failures f
+    JOIN tasks t ON f.task_id = t.id
+    WHERE t.task_type = ?
+      AND f.notes IS NOT NULL
+      AND f.notes != ''
+    ORDER BY f.created_at DESC
+    LIMIT 10
+  `),
+
   getSetting: db.prepare(`SELECT value FROM settings WHERE key = ?`),
   setSetting: db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`),
 };

@@ -37,6 +37,20 @@ app.get('/api/tasks', (_req, res) => {
   }
 });
 
+// GET /api/failures/count — get failure count for a task type
+app.get('/api/failures/count', (req, res) => {
+  const { taskType } = req.query;
+  if (!taskType) {
+    return res.status(400).json({ error: 'taskType required' });
+  }
+  try {
+    const rows = stmts.getFailuresByTaskType.all(taskType);
+    res.json({ count: rows.length, notes: rows.map(r => r.notes) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/scan-project — scan a project folder for context
 app.post('/api/scan-project', async (req, res) => {
   const { path: folderPath } = req.body;
@@ -61,7 +75,7 @@ app.post('/api/scan-project', async (req, res) => {
 
 // POST /api/generate — generate a new task via Claude Code CLI
 app.post('/api/generate', async (req, res) => {
-  const { input, projectPath, projectContext } = req.body;
+  const { input, projectPath, projectContext, taskType } = req.body;
 
   if (!input?.trim()) {
     return res.status(400).json({ error: 'input required' });
@@ -73,11 +87,22 @@ app.post('/api/generate', async (req, res) => {
   });
 
   try {
+    // Build known issues block from past failures
+    let knownIssues = null;
+    if (taskType) {
+      const failures = stmts.getFailuresByTaskType.all(taskType);
+      if (failures.length > 0) {
+        const notes = failures.map(f => `- ${f.notes}`).join('\n');
+        knownIssues = `KNOWN ISSUES FOR ${taskType}:\n${notes}\n\nAvoid these patterns in your output.`;
+      }
+    }
+
     const parsed = await spawnClaude(input, {
       onAbort: (fn) => {
         kill = fn;
       },
       projectContext: projectContext?.promptBlock,
+      knownIssues,
     });
 
     const task = buildTask(parsed, input, projectPath, projectContext);

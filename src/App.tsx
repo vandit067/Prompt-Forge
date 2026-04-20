@@ -4,7 +4,8 @@ import { CommandCenter, TaskDetail } from './screens/CommandCenter';
 import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
 import { api } from './lib/api';
-import { generateTask, scanProject, CliNotInstalledError, GenerationCancelledError } from './services/claude-cli';
+import { generateTask, scanProject, getFailureCount, CliNotInstalledError, GenerationCancelledError } from './services/claude-cli';
+import { classifyTask } from './data/generators';
 import type { Task, Screen, ScannedContext } from './types';
 
 export default function App() {
@@ -18,6 +19,7 @@ export default function App() {
   const [scannedContext, setScannedContext] = useState<ScannedContext | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [knownIssuesCount, setKnownIssuesCount] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -56,7 +58,12 @@ export default function App() {
     setCliError(null);
 
     try {
-      const task = await generateTask(input, projectPath, scannedContext, controller.signal);
+      // Pre-classify to query failures before starting generation
+      const taskType = classifyTask(input);
+      const { count } = await getFailureCount(taskType);
+      setKnownIssuesCount(count);
+
+      const task = await generateTask(input, projectPath, scannedContext, taskType, controller.signal);
       setTasks(prev => [task, ...prev]);
       setLiveTask(task);
     } catch (err) {
@@ -185,6 +192,7 @@ export default function App() {
             isScanning={isScanning}
             scanError={scanError}
             onScanProject={handleScanProject}
+            knownIssuesCount={knownIssuesCount}
           />
         );
     }

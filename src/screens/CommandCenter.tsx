@@ -1262,6 +1262,7 @@ interface Props {
   isScanning?: boolean;
   scanError?: string | null;
   onScanProject?: (path: string) => Promise<void>;
+  knownIssuesCount?: number;
 }
 
 export function CommandCenter({
@@ -1277,6 +1278,7 @@ export function CommandCenter({
   isScanning,
   scanError,
   onScanProject,
+  knownIssuesCount = 0,
 }: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
@@ -1553,6 +1555,28 @@ export function CommandCenter({
             projectPath={projectPath}
             onRescan={() => onScanProject?.(projectPath)}
           />
+        )}
+
+        {/* Known Issues Indicator */}
+        {knownIssuesCount > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              background: '#2d1f4a',
+              border: '1px solid #5b3d8a',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontFamily: '"JetBrains Mono", monospace',
+              color: '#c4b5fd',
+            }}
+          >
+            <span>⟳</span>
+            Learning from {knownIssuesCount} past{' '}
+            {knownIssuesCount === 1 ? 'issue' : 'issues'}
+          </div>
         )}
 
         {/* CLI Error Banners */}

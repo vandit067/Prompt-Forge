@@ -34,16 +34,36 @@ export async function scanProject(folderPath: string): Promise<ScannedContext> {
   return res.json() as Promise<ScannedContext>;
 }
 
+export async function getFailureCount(
+  taskType: string
+): Promise<{ count: number; notes: string[] }> {
+  try {
+    const res = await fetch(
+      `/api/failures/count?taskType=${encodeURIComponent(taskType)}`
+    );
+    if (!res.ok) return { count: 0, notes: [] };
+    return res.json();
+  } catch {
+    return { count: 0, notes: [] };
+  }
+}
+
 export async function generateTask(
   input: string,
   projectPath: string | undefined,
   scannedContext: ScannedContext | null,
+  taskType: string | undefined,
   signal: AbortSignal
 ): Promise<Task> {
   const res = await fetch('/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ input, projectPath, projectContext: scannedContext }),
+    body: JSON.stringify({
+      input,
+      projectPath,
+      projectContext: scannedContext,
+      taskType,
+    }),
     signal,
   });
 

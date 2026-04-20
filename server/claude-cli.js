@@ -10,7 +10,7 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export async function spawnClaude(userInput, { onAbort, projectContext } = {}) {
+export async function spawnClaude(userInput, { onAbort, projectContext, knownIssues } = {}) {
   let rules;
   try {
     rules = readFileSync(RULES_PATH, 'utf8');
@@ -23,7 +23,12 @@ export async function spawnClaude(userInput, { onAbort, projectContext } = {}) {
     contextBlock = `\n\n---\n\n${projectContext}\n`;
   }
 
-  const prompt = `${rules}${contextBlock}\n\n---\n\nTASK:\n${userInput}`;
+  let knownIssuesBlock = '';
+  if (knownIssues) {
+    knownIssuesBlock = `\n\n---\n\n${knownIssues}\n`;
+  }
+
+  const prompt = `${rules}${contextBlock}${knownIssuesBlock}\n\n---\n\nTASK:\n${userInput}`;
 
   return new Promise((resolve, reject) => {
     const proc = spawn('claude', ['-p', prompt], {

@@ -39,6 +39,7 @@ export interface PlanStep {
 
 export interface Task {
   id: string;
+  title: string;
   input: string;
   taskType: TaskType;
   projectPath?: string;

@@ -1,26 +1,38 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CommandCenter, TaskDetail } from './screens/CommandCenter';
 import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
-import { MOCK_TASKS } from './data/mockData';
 import { generateFakeTask } from './data/generators';
+import { api } from './lib/api';
 import type { Task, Screen } from './types';
 
 export default function App() {
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [currentScreen, setCurrentScreen] = useState<Screen>('command-center');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveTask, setLiveTask] = useState<Task | null>(null);
+  const [dbReady, setDbReady] = useState(false);
+
+  // Load persisted tasks from SQLite on mount
+  useEffect(() => {
+    api.getTasks()
+      .then(saved => {
+        setTasks(saved);
+        setDbReady(true);
+      })
+      .catch(() => {
+        // API not running — start with empty list, still show the UI
+        setDbReady(true);
+      });
+  }, []);
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId) ?? null;
 
   function handleNavigate(screen: Screen) {
     setCurrentScreen(screen);
-    if (screen !== 'task-detail') {
-      setSelectedTaskId(null);
-    }
+    if (screen !== 'task-detail') setSelectedTaskId(null);
   }
 
   function handleSelectTask(taskId: string) {
@@ -34,16 +46,20 @@ export default function App() {
     setCurrentScreen('command-center');
     setSelectedTaskId(null);
 
-    // Simulate CLI call latency
     await new Promise(res => setTimeout(res, 1600));
 
     const newTask = generateFakeTask(input, projectPath);
+
+    // Optimistically add to UI first so sidebar updates immediately
     setTasks(prev => [newTask, ...prev]);
     setLiveTask(newTask);
     setIsGenerating(false);
+
+    // Persist to SQLite in the background
+    api.saveTask(newTask).catch(console.error);
   }
 
-  function handleUpdateStatus(taskId: string, status: 'success' | 'error', notes?: string) {
+  async function handleUpdateStatus(taskId: string, status: 'success' | 'error', notes?: string) {
     setTasks(prev =>
       prev.map(t =>
         t.id === taskId
@@ -51,6 +67,7 @@ export default function App() {
           : t
       )
     );
+    api.updateStatus(taskId, status, notes).catch(console.error);
   }
 
   function handleRetry(task: Task) {
@@ -98,7 +115,6 @@ export default function App() {
             />
           );
         }
-        // Fall through to command center if no task selected
         return (
           <CommandCenter
             onGenerate={handleGenerate}
@@ -135,6 +151,7 @@ export default function App() {
         selectedTaskId={selectedTaskId}
         onNavigate={handleNavigate}
         onSelectTask={handleSelectTask}
+        dbReady={dbReady}
       />
       {renderMain()}
     </div>

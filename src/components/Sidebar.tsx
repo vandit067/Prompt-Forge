@@ -10,6 +10,7 @@ interface Props {
   selectedTaskId: string | null;
   onNavigate: (screen: Screen) => void;
   onSelectTask: (taskId: string) => void;
+  dbReady?: boolean;
 }
 
 function formatRelativeTime(iso: string): string {
@@ -33,7 +34,7 @@ const NAV_ITEMS = [
   { screen: 'settings' as Screen, icon: Settings, label: 'Settings' },
 ];
 
-export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSelectTask }: Props) {
+export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSelectTask, dbReady = true }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'success' | 'error'>('all');
 
@@ -195,10 +196,13 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
       </div>
 
       {/* Task list header */}
-      <div style={{ padding: '4px 12px 6px', flexShrink: 0 }}>
+      <div style={{ padding: '4px 12px 6px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           History — {filtered.length} task{filtered.length !== 1 ? 's' : ''}
         </span>
+        {!dbReady && (
+          <span style={{ fontSize: '9px', color: '#3b82f6', fontFamily: '"JetBrains Mono", monospace' }}>loading…</span>
+        )}
       </div>
 
       {/* Task list */}
@@ -252,7 +256,7 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
                       flex: 1,
                     }}
                   >
-                    {truncate(task.input)}
+                    {truncate(task.title)}
                   </span>
                 </div>
                 {/* Meta row */}

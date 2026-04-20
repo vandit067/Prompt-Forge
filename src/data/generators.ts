@@ -19,12 +19,20 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
+export function generateTitle(input: string): string {
+  const first = input.split('\n')[0].trim();
+  const sentence = first.split(/[.!?]/)[0].trim();
+  const base = sentence.length > 4 ? sentence : first;
+  return base.length > 58 ? base.slice(0, 55) + '…' : base;
+}
+
 export function generateFakeTask(input: string, projectPath?: string): Task {
   const taskType = classifyTask(input);
   const now = new Date().toISOString();
 
   return {
     id: `task-${uid()}`,
+    title: generateTitle(input),
     input,
     taskType,
     projectPath,

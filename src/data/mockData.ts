@@ -1,8 +1,10 @@
 import type { Task } from '../types';
+import { generateTitle } from './generators';
 
 export const MOCK_TASKS: Task[] = [
   {
     id: 'task-001',
+    title: generateTitle('Build a CLI tool that converts Markdown files to PDF with custom themes'),
     input: 'Build a CLI tool that converts Markdown files to PDF with custom themes',
     taskType: 'NEW_TOOL',
     status: 'success',
@@ -144,6 +146,7 @@ src/
   },
   {
     id: 'task-002',
+    title: generateTitle("The search filter in my task list doesn't reset when the input is cleared"),
     input: "The search filter in my task list doesn't reset when the input is cleared",
     taskType: 'BUG_FIX',
     status: 'error',
@@ -188,6 +191,7 @@ Verification:
   },
   {
     id: 'task-003',
+    title: generateTitle('Add dark mode toggle to the settings panel with localStorage persistence'),
     input: 'Add dark mode toggle to the settings panel with localStorage persistence',
     taskType: 'NEW_FEATURE',
     status: 'success',
@@ -234,6 +238,7 @@ Verification:
   },
   {
     id: 'task-004',
+    title: generateTitle('Should I use Zustand or Jotai for global state in my React app?'),
     input: 'Should I use Zustand or Jotai for global state in my React app?',
     taskType: 'DESIGN_DECISION',
     status: 'pending',
@@ -292,6 +297,7 @@ Verification:
   },
   {
     id: 'task-005',
+    title: generateTitle('Dashboard first load is taking 3-4 seconds — optimize performance'),
     input: 'Dashboard first load is taking 3-4 seconds — optimize performance',
     taskType: 'PERF_OPTIMIZATION',
     status: 'success',
@@ -356,6 +362,7 @@ Verification:
   },
   {
     id: 'task-006',
+    title: generateTitle('Write technical documentation for the notification system'),
     input: 'Write technical documentation for the notification system',
     taskType: 'DOC_OR_SPEC',
     status: 'success',

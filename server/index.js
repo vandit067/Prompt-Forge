@@ -8,6 +8,24 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '4mb' }));
 
+// Classify error type based on error notes content
+function classifyErrorType(notes) {
+  if (!notes) return 'unknown';
+  const lower = notes.toLowerCase();
+  if (lower.includes('syntax') || lower.includes('parse')) return 'syntax_error';
+  if (lower.includes('type') || lower.includes('typing')) return 'type_error';
+  if (lower.includes('import') || lower.includes('module not found')) return 'import_error';
+  if (lower.includes('runtime') || lower.includes('not defined')) return 'runtime_error';
+  if (lower.includes('timeout') || lower.includes('too long')) return 'timeout';
+  if (lower.includes('memory') || lower.includes('heap')) return 'memory_error';
+  if (lower.includes('network') || lower.includes('connection')) return 'network_error';
+  if (lower.includes('permission') || lower.includes('access denied')) return 'permission_error';
+  if (lower.includes('database') || lower.includes('query')) return 'database_error';
+  if (lower.includes('logic') || lower.includes('incorrect')) return 'logic_error';
+  if (lower.includes('missing') || lower.includes('not found')) return 'missing_requirement';
+  return 'user_reported';
+}
+
 function rowToTask(row) {
   let projectContext;
   if (row.project_context) {
@@ -202,7 +220,8 @@ app.patch('/api/tasks/:id', (req, res) => {
       updated_at:  new Date().toISOString(),
     });
     if (status === 'error' && errorNotes) {
-      stmts.insertFailure.run(req.params.id, 'user_reported', errorNotes);
+      const errorType = classifyErrorType(errorNotes);
+      stmts.insertFailure.run(req.params.id, errorType, errorNotes);
     }
     res.json({ ok: true });
   } catch (err) {

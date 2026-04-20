@@ -1034,9 +1034,11 @@ interface Props {
   onGenerate: (input: string, projectPath?: string) => Promise<void>;
   currentTask: Task | null;
   isGenerating: boolean;
+  selectedTask: Task | null;
+  onClearSelection: () => void;
 }
 
-export function CommandCenter({ onGenerate, currentTask, isGenerating }: Props) {
+export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedTask, onClearSelection }: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
@@ -1279,66 +1281,126 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating }: Props) 
         {projectMode === 'existing' && <ProjectContextCard />}
 
         {/* Tabbed output panel — always visible */}
-        <div
-          style={{
-            background: '#0f0f12',
-            border: '1px solid #1c1c22',
-            borderRadius: '12px',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Tab bar */}
-          <div
-            style={{
-              display: 'flex',
-              borderBottom: '1px solid #1c1c22',
-              background: '#0a0a0d',
-              padding: '0 4px',
-            }}
-          >
-            {TABS.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+        {isGenerating ? (
+          <GeneratingState />
+        ) : selectedTask ? (
+          /* ── Selected task: show real output ── */
+          <div>
+            {/* Task header strip */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px 14px',
+                background: '#0a0a0d',
+                border: '1px solid #1c1c22',
+                borderRadius: '10px 10px 0 0',
+                borderBottom: 'none',
+              }}
+            >
+              <TaskTypePill type={selectedTask.taskType} size="md" />
+              <span
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '11px 16px',
-                  border: 'none',
-                  borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : '2px solid transparent',
-                  background: 'transparent',
-                  color: activeTab === tab.id ? '#fafafa' : '#71717a',
+                  flex: 1,
                   fontSize: '12px',
+                  color: '#d4d4d8',
                   fontFamily: '"Inter", system-ui, sans-serif',
-                  fontWeight: activeTab === tab.id ? 500 : 400,
-                  cursor: 'pointer',
-                  transition: 'color 0.12s',
-                  marginBottom: '-1px',
-                }}
-                onMouseEnter={e => {
-                  if (activeTab !== tab.id)
-                    (e.currentTarget as HTMLButtonElement).style.color = '#d4d4d8';
-                }}
-                onMouseLeave={e => {
-                  if (activeTab !== tab.id)
-                    (e.currentTarget as HTMLButtonElement).style.color = '#71717a';
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {tab.icon}
-                {tab.label}
+                {selectedTask.title}
+              </span>
+              <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
+                {new Date(selectedTask.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </span>
+              <button
+                onClick={onClearSelection}
+                title="Close"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#52525b',
+                  cursor: 'pointer',
+                  padding: '2px 4px',
+                  borderRadius: '4px',
+                  lineHeight: 1,
+                  fontSize: '14px',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#fafafa'}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = '#52525b'}
+              >
+                ×
               </button>
-            ))}
+            </div>
+            <OutputPanel task={selectedTask} />
           </div>
+        ) : (
+          /* ── Default demo: hardcoded fake tabs ── */
+          <div
+            style={{
+              background: '#0f0f12',
+              border: '1px solid #1c1c22',
+              borderRadius: '12px',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Tab bar */}
+            <div
+              style={{
+                display: 'flex',
+                borderBottom: '1px solid #1c1c22',
+                background: '#0a0a0d',
+                padding: '0 4px',
+              }}
+            >
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '11px 16px',
+                    border: 'none',
+                    borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : '2px solid transparent',
+                    background: 'transparent',
+                    color: activeTab === tab.id ? '#fafafa' : '#71717a',
+                    fontSize: '12px',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                    fontWeight: activeTab === tab.id ? 500 : 400,
+                    cursor: 'pointer',
+                    transition: 'color 0.12s',
+                    marginBottom: '-1px',
+                  }}
+                  onMouseEnter={e => {
+                    if (activeTab !== tab.id)
+                      (e.currentTarget as HTMLButtonElement).style.color = '#d4d4d8';
+                  }}
+                  onMouseLeave={e => {
+                    if (activeTab !== tab.id)
+                      (e.currentTarget as HTMLButtonElement).style.color = '#71717a';
+                  }}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-          {/* Tab content */}
-          <div style={{ padding: '16px' }}>
-            {activeTab === 'prompts'   && <PromptsTab />}
-            {activeTab === 'files'     && <FilesTab />}
-            {activeTab === 'plan'      && <PlanTab />}
-            {activeTab === 'checklist' && <ChecklistTab />}
+            {/* Tab content */}
+            <div style={{ padding: '16px' }}>
+              {activeTab === 'prompts'   && <PromptsTab />}
+              {activeTab === 'files'     && <FilesTab />}
+              {activeTab === 'plan'      && <PlanTab />}
+              {activeTab === 'checklist' && <ChecklistTab />}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

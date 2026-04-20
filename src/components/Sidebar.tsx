@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Terminal, BarChart3, Settings, Search, X } from 'lucide-react';
 import { TaskTypePill } from './TaskTypePill';
 import { StatusIcon } from './StatusIcon';
-import type { Task, Screen } from '../types';
+import type { Task, Screen, TaskType } from '../types';
+import { TASK_TYPE_CONFIG } from '../types';
 
 interface Props {
   tasks: Task[];
@@ -24,7 +25,7 @@ function formatRelativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-function truncate(text: string, max = 48): string {
+function truncate(text: string, max = 46): string {
   return text.length > max ? text.slice(0, max) + '…' : text;
 }
 
@@ -34,15 +35,27 @@ const NAV_ITEMS = [
   { screen: 'settings' as Screen, icon: Settings, label: 'Settings' },
 ];
 
+const ALL_TYPES = Object.keys(TASK_TYPE_CONFIG) as TaskType[];
+
 export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSelectTask, dbReady = true }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'success' | 'error'>('all');
+  const [typeFilter, setTypeFilter] = useState<TaskType | 'all'>('all');
 
   const filtered = tasks.filter(t => {
-    const matchesSearch = search === '' || t.input.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = search === '' || t.title.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesType = typeFilter === 'all' || t.taskType === typeFilter;
+    return matchesSearch && matchesStatus && matchesType;
   });
+
+  function clearFilters() {
+    setSearch('');
+    setStatusFilter('all');
+    setTypeFilter('all');
+  }
+
+  const hasActiveFilter = search !== '' || statusFilter !== 'all' || typeFilter !== 'all';
 
   return (
     <aside
@@ -131,8 +144,8 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
         })}
       </nav>
 
-      {/* Search + filter */}
-      <div style={{ padding: '10px 12px 8px', flexShrink: 0 }}>
+      {/* Search */}
+      <div style={{ padding: '10px 12px 0', flexShrink: 0 }}>
         <div
           style={{
             position: 'relative',
@@ -147,13 +160,14 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
           <Search size={12} color="#71717a" style={{ flexShrink: 0 }} />
           <input
             type="text"
-            placeholder="Search tasks…"
+            placeholder="Search by title…"
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
               flex: 1,
               background: 'transparent',
               border: 'none',
+              outline: 'none',
               color: '#fafafa',
               fontSize: '12px',
               fontFamily: '"Inter", system-ui, sans-serif',
@@ -169,9 +183,11 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
             </button>
           )}
         </div>
+      </div>
 
-        {/* Status filter pills */}
-        <div style={{ display: 'flex', gap: '4px', marginTop: '7px' }}>
+      {/* Status filter */}
+      <div style={{ padding: '8px 12px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: '4px' }}>
           {(['all', 'pending', 'success', 'error'] as const).map(s => (
             <button
               key={s}
@@ -195,13 +211,89 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
         </div>
       </div>
 
+      {/* Task type filter — horizontally scrollable */}
+      <div
+        style={{
+          padding: '6px 12px 8px',
+          flexShrink: 0,
+          overflowX: 'auto',
+          scrollbarWidth: 'none',
+        }}
+      >
+        <div style={{ display: 'flex', gap: '4px', width: 'max-content' }}>
+          {/* "All types" reset pill */}
+          <button
+            onClick={() => setTypeFilter('all')}
+            style={{
+              padding: '2px 8px',
+              borderRadius: '5px',
+              border: '1px solid',
+              fontSize: '10px',
+              fontFamily: '"JetBrains Mono", monospace',
+              cursor: 'pointer',
+              background: typeFilter === 'all' ? '#1c1c22' : 'transparent',
+              borderColor: typeFilter === 'all' ? '#3c3c48' : '#1c1c22',
+              color: typeFilter === 'all' ? '#fafafa' : '#71717a',
+              transition: 'all 0.12s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            all types
+          </button>
+          {ALL_TYPES.map(type => {
+            const cfg = TASK_TYPE_CONFIG[type];
+            const active = typeFilter === type;
+            return (
+              <button
+                key={type}
+                onClick={() => setTypeFilter(active ? 'all' : type)}
+                style={{
+                  padding: '2px 7px',
+                  borderRadius: '5px',
+                  border: `1px solid ${active ? cfg.color + '60' : '#1c1c22'}`,
+                  fontSize: '10px',
+                  fontFamily: '"JetBrains Mono", monospace',
+                  cursor: 'pointer',
+                  background: active ? cfg.bg : 'transparent',
+                  color: active ? cfg.color : '#52525b',
+                  transition: 'all 0.12s',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {cfg.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Task list header */}
-      <div style={{ padding: '4px 12px 6px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <div style={{ padding: '2px 12px 6px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          History — {filtered.length} task{filtered.length !== 1 ? 's' : ''}
+          {filtered.length} of {tasks.length} task{tasks.length !== 1 ? 's' : ''}
         </span>
         {!dbReady && (
           <span style={{ fontSize: '9px', color: '#3b82f6', fontFamily: '"JetBrains Mono", monospace' }}>loading…</span>
+        )}
+        {hasActiveFilter && (
+          <button
+            onClick={clearFilters}
+            style={{
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: '#52525b',
+              fontSize: '10px',
+              cursor: 'pointer',
+              fontFamily: '"JetBrains Mono", monospace',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+            }}
+          >
+            <X size={10} /> clear
+          </button>
         )}
       </div>
 
@@ -209,11 +301,11 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 16px' }}>
         {filtered.length === 0 ? (
           <div style={{ padding: '20px 8px', textAlign: 'center', color: '#52525b', fontSize: '12px' }}>
-            No tasks found
+            {tasks.length === 0 ? 'No tasks yet — submit your first request' : 'No tasks match filters'}
           </div>
         ) : (
           filtered.map(task => {
-            const isSelected = selectedTaskId === task.id && currentScreen === 'task-detail';
+            const isSelected = selectedTaskId === task.id;
             return (
               <button
                 key={task.id}
@@ -250,10 +342,11 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
                   <span
                     style={{
                       fontSize: '12px',
-                      color: '#d4d4d8',
+                      color: isSelected ? '#fafafa' : '#d4d4d8',
                       lineHeight: '1.4',
                       wordBreak: 'break-word',
                       flex: 1,
+                      fontWeight: isSelected ? 500 : 400,
                     }}
                   >
                     {truncate(task.title)}

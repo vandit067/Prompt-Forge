@@ -15,47 +15,44 @@ export default function App() {
   const [liveTask, setLiveTask] = useState<Task | null>(null);
   const [dbReady, setDbReady] = useState(false);
 
-  // Load persisted tasks from SQLite on mount
   useEffect(() => {
     api.getTasks()
-      .then(saved => {
-        setTasks(saved);
-        setDbReady(true);
-      })
-      .catch(() => {
-        // API not running — start with empty list, still show the UI
-        setDbReady(true);
-      });
+      .then(saved => { setTasks(saved); setDbReady(true); })
+      .catch(() => setDbReady(true));
   }, []);
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId) ?? null;
 
   function handleNavigate(screen: Screen) {
     setCurrentScreen(screen);
-    if (screen !== 'task-detail') setSelectedTaskId(null);
+    if (screen !== 'command-center' && screen !== 'task-detail') {
+      setSelectedTaskId(null);
+    }
   }
 
+  // Clicking a sidebar task stays on command-center and loads output in tab panel
   function handleSelectTask(taskId: string) {
     setSelectedTaskId(taskId);
-    setCurrentScreen('task-detail');
+    setCurrentScreen('command-center');
+  }
+
+  function handleClearSelection() {
+    setSelectedTaskId(null);
   }
 
   async function handleGenerate(input: string, projectPath?: string) {
     setIsGenerating(true);
     setLiveTask(null);
+    setSelectedTaskId(null); // clear any selected task when generating
     setCurrentScreen('command-center');
-    setSelectedTaskId(null);
 
     await new Promise(res => setTimeout(res, 1600));
 
     const newTask = generateFakeTask(input, projectPath);
-
-    // Optimistically add to UI first so sidebar updates immediately
     setTasks(prev => [newTask, ...prev]);
     setLiveTask(newTask);
     setIsGenerating(false);
 
-    // Persist to SQLite in the background
     api.saveTask(newTask).catch(console.error);
   }
 
@@ -120,6 +117,8 @@ export default function App() {
             onGenerate={handleGenerate}
             currentTask={liveTask}
             isGenerating={isGenerating}
+            selectedTask={selectedTask}
+            onClearSelection={handleClearSelection}
           />
         );
 
@@ -130,6 +129,8 @@ export default function App() {
             onGenerate={handleGenerate}
             currentTask={liveTask}
             isGenerating={isGenerating}
+            selectedTask={selectedTask}
+            onClearSelection={handleClearSelection}
           />
         );
     }

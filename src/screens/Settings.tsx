@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Terminal, Download, Upload, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import type { Task } from '../types';
 
 interface Props {
@@ -12,14 +13,14 @@ function SectionCard({ title, subtitle, children }: { title: string; subtitle?: 
   return (
     <div
       style={{
-        background: '#0f0f12',
-        border: '1px solid #1c1c22',
-        borderRadius: '12px',
-        padding: '20px',
+        background: colors.bgCard,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.xl,
+        padding: space.lg,
       }}
     >
-      <h2 style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 600, color: '#fafafa' }}>{title}</h2>
-      {subtitle && <p style={{ margin: '0 0 16px', fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>{subtitle}</p>}
+      <h2 style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 600, color: colors.fg }}>{title}</h2>
+      {subtitle && <p style={{ margin: '0 0 16px', fontSize: '11px', color: colors.fgDim, fontFamily: fonts.mono }}>{subtitle}</p>}
       {!subtitle && <div style={{ marginBottom: '16px' }} />}
       {children}
     </div>

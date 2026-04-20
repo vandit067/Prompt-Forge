@@ -1,6 +1,7 @@
 import type { Task, TaskType } from '../types';
 import { TASK_TYPE_CONFIG } from '../types';
 import { TrendingUp, CheckCircle2, XCircle, Clock, BarChart3 } from 'lucide-react';
+import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 
 interface Props {
   tasks: Task[];
@@ -22,17 +23,17 @@ function StatCard({
   return (
     <div
       style={{
-        background: '#0f0f12',
-        border: '1px solid #1c1c22',
-        borderRadius: '12px',
-        padding: '20px',
+        background: colors.bgCard,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.xl,
+        padding: space.lg,
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
+        gap: space.xs,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '12px', color: '#71717a', fontFamily: '"Inter", system-ui, sans-serif' }}>{label}</span>
+        <span style={{ fontSize: '12px', color: colors.fgMuted, fontFamily: fonts.sans }}>{label}</span>
         <div
           style={{
             width: '30px',
@@ -47,10 +48,10 @@ function StatCard({
           {icon}
         </div>
       </div>
-      <div style={{ fontSize: '28px', fontWeight: 700, color: '#fafafa', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '-0.02em' }}>
+      <div style={{ fontSize: '28px', fontWeight: 700, color: colors.fg, fontFamily: fonts.mono, letterSpacing: '-0.02em' }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: '11px', color: colors.fgDim, fontFamily: fonts.mono }}>{sub}</div>}
     </div>
   );
 }

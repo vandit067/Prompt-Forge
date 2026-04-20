@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
+import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import type { Task, OutputTab, ProjectMode, ScannedContext } from '../types';
 
 /* ─── Shared Output Panel ─── */
@@ -1352,14 +1353,14 @@ export function CommandCenter({
         {/* Input area */}
         <div
           style={{
-            background: '#0f0f12',
-            border: '1px solid #1c1c22',
-            borderRadius: '12px',
+            background: colors.bgCard,
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.xl,
             overflow: 'hidden',
-            transition: 'border-color 0.15s',
+            transition: `border-color ${transitions.fast}`,
           }}
-          onFocusCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6'}
-          onBlurCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = '#1c1c22'}
+          onFocusCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = colors.blue}
+          onBlurCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = colors.border}
         >
           <textarea
             ref={textareaRef}
@@ -1396,15 +1397,15 @@ export function CommandCenter({
             }}
           >
             {/* Project mode toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
               <div
                 style={{
                   display: 'flex',
-                  background: '#18181b',
-                  border: '1px solid #1c1c22',
-                  borderRadius: '7px',
-                  padding: '2px',
-                  gap: '2px',
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.md,
+                  padding: space.xs,
+                  gap: space.xs,
                 }}
               >
                 {(['new', 'existing'] as const).map(mode => (
@@ -1412,16 +1413,28 @@ export function CommandCenter({
                     key={mode}
                     onClick={() => setProjectMode(mode)}
                     style={{
-                      padding: '4px 10px',
-                      borderRadius: '5px',
-                      border: 'none',
-                      background: projectMode === mode ? '#1c1c22' : 'transparent',
-                      color: projectMode === mode ? '#fafafa' : '#71717a',
+                      padding: `${space.xs} ${space.md}`,
+                      borderRadius: radius.sm,
+                      border: projectMode === mode ? `1px solid ${colors.blue}` : '1px solid transparent',
+                      background: projectMode === mode ? colors.blueBg : colors.bgInput,
+                      color: projectMode === mode ? colors.blueLight : colors.fgHover,
                       fontSize: '11px',
-                      fontFamily: '"Inter", system-ui, sans-serif',
-                      fontWeight: projectMode === mode ? 500 : 400,
+                      fontFamily: fonts.sans,
+                      fontWeight: projectMode === mode ? 600 : 500,
                       cursor: 'pointer',
-                      transition: 'all 0.12s',
+                      transition: transitions.fast,
+                    }}
+                    onMouseEnter={e => {
+                      if (projectMode !== mode) {
+                        (e.currentTarget as HTMLButtonElement).style.background = colors.borderLight;
+                        (e.currentTarget as HTMLButtonElement).style.color = colors.fg;
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (projectMode !== mode) {
+                        (e.currentTarget as HTMLButtonElement).style.background = colors.bgInput;
+                        (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
+                      }
                     }}
                   >
                     {mode === 'new' ? 'New Project' : 'Existing Project'}

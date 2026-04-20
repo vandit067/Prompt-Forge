@@ -48,53 +48,26 @@ function generateTaskSpec(input, taskType) {
 }
 
 function generatePrompts(input, taskType) {
-  // Detect technology/domain from input
-  const isAndroid = /android|kotlin|java(?:\s+app)?/.test(input.toLowerCase());
-  const isIOS = /ios|swift|objective-c/.test(input.toLowerCase());
-  const isWeb = /web|react|vue|angular|javascript|typescript/.test(input.toLowerCase());
-  const isPython = /python|django|flask/.test(input.toLowerCase());
-  const isTheme = /theme|dark|light|color|style/.test(input.toLowerCase());
-  const isAPI = /api|backend|server|database/.test(input.toLowerCase());
-
-  let techContext = '';
-  if (isAndroid) techContext = 'Android (Kotlin/Java)';
-  else if (isIOS) techContext = 'iOS (Swift)';
-  else if (isWeb) techContext = 'Web (JavaScript/TypeScript)';
-  else if (isPython) techContext = 'Python';
-
-  const specifics = [];
-  if (isTheme) specifics.push('- Theme/styling implementation with clear abstractions');
-  if (isAPI) specifics.push('- API integration with proper error handling');
-  if (/ui|layout|component|screen/.test(input.toLowerCase())) specifics.push('- UI/UX best practices and responsive design');
-
-  const specificRequirements = specifics.length > 0 ? `\n\nSpecific focus areas:\n${specifics.join('\n')}` : '';
-
-  const basePrompt = `Context: Build an ${techContext ? `${techContext} ` : ''}application with the following requirements:\n"${input}"${specificRequirements}
-
-Requirements Analysis:
-${extractRequirements(input)}
+  const basePrompt = `Context: User request: "${input}"
 
 Steps:
-1. Break down the requirements into well-defined features
-2. Design the architecture and data structures
-3. Implement core functionality with clean, modular code
-4. Add comprehensive error handling and validation
-5. Test thoroughly including edge cases and user flows
-6. Ensure performance and maintainability
+1. Understand the requirements and acceptance criteria
+2. Plan the implementation approach and technical decisions
+3. Write clear, modular code following best practices
+4. Test thoroughly with various inputs and edge cases
+5. Ensure error handling and user feedback are appropriate
 
 Constraints:
-- Follow platform-specific best practices and conventions
-- Use established patterns and libraries where appropriate
-- Write code that's testable and maintainable
-- Include meaningful comments only for complex logic
-- Keep configuration separate from hardcoded values
+- Write clean, maintainable code
+- Follow language-specific conventions and idioms
+- Add comments only for non-obvious logic
+- No hardcoded values that should be configurable
 
 Verification:
-- All requirements from the context are implemented
-- App runs without crashes or warnings
-- User interactions work smoothly without lag
-- Error cases are handled gracefully
-- Code follows style guidelines for the platform`;
+- Type checking passes (if applicable)
+- All tests pass
+- Manual testing confirms expected behavior
+- No console errors or warnings`;
 
   return [
     {
@@ -102,47 +75,19 @@ Verification:
       content: basePrompt + `
 
 Validation Audit:
-Before finishing, do a full audit. Report (do NOT fix yet):
+Before we finish, do a full audit. Do NOT change any code yet. Just report:
 
-1. **Requirements Met**: Does the implementation address all requirements above?
-2. **Functionality**: Test each feature mentioned - does it work as expected?
-3. **Code Quality**: Check for errors, unused code, hardcoded values, missing error handling
-4. **Edge Cases**: What breaks if user provides invalid input or uses features in unexpected order?
-5. **User Experience**: Are errors clear? Is the UI responsive?
+1. **Spec compliance**: Compare what was built against the requirements in this prompt
+2. **Code quality**: Check for any errors, unused imports, console.logs left in
+3. **Edge cases**: Identify 3 things that could break with unexpected input
+4. **Testing**: Verify all manual tests passed
+5. **User experience**: Check that feedback and error messages are clear
 
-Show the complete audit report. Do not make changes yet.
+Show me the full report. Do not fix anything yet.
 
-After audit: "Fix all issues found in the audit, smallest first. Commit after each fix."`,
+After the audit report, add: Fix all gaps found in the audit, smallest first. Commit after each fix.`,
     },
   ];
-}
-
-function extractRequirements(input) {
-  // Extract key requirements from user input
-  const requirements = [];
-
-  // Feature detection
-  const features = {
-    'theme/color management': /theme|color|style|dark|light/i,
-    'settings screen': /setting|preference|configuration|config/i,
-    'user interface': /ui|layout|screen|view|button|button/i,
-    'data persistence': /save|store|persist|database|cache/i,
-    'authentication': /login|auth|user|account|password/i,
-    'notifications': /notification|alert|notify|message/i,
-    'api/backend': /api|backend|server|network|sync/i,
-  };
-
-  for (const [feature, regex] of Object.entries(features)) {
-    if (regex.test(input)) {
-      requirements.push(`- ${feature.charAt(0).toUpperCase() + feature.slice(1)}`);
-    }
-  }
-
-  if (requirements.length === 0) {
-    requirements.push('- Core application functionality');
-  }
-
-  return requirements.join('\n');
 }
 
 function generateFiles(taskType, input = '') {
@@ -150,42 +95,11 @@ function generateFiles(taskType, input = '') {
     return [
       {
         filename: 'SPEC.md',
-        content: `# Project Specification
-
-## Purpose
-Description of what this tool/project does.
-
-## Features
-- Feature 1
-- Feature 2
-- Feature 3
-
-## Architecture
-High-level design and technology choices.
-
-## Setup
-Installation and configuration steps.
-`,
+        content: `# Project Specification\n\n## Purpose\nDescription of what this tool/project does.\n\n## Features\n- Feature 1\n- Feature 2\n\n## Architecture\nHigh-level design.\n`,
       },
       {
         filename: 'CLAUDE.md',
-        content: `# CLAUDE.md
-
-Guidelines for working on this project.
-
-## Key Files
-- Main entry point
-- Configuration
-- Tests
-
-## Before You Start
-Read SPEC.md for full context.
-
-## Rules
-- Keep code modular and testable
-- Use meaningful variable names
-- Add comments for complex logic
-`,
+        content: `# CLAUDE.md\n\nGuidelines for this project.\n\n## Rules\n- Keep code modular\n- Use meaningful names\n`,
       },
     ];
   }
@@ -194,152 +108,12 @@ Read SPEC.md for full context.
     return [
       {
         filename: 'DOCUMENTATION.md',
-        content: `# Documentation
-
-## Overview
-Describe what this documents.
-
-## Getting Started
-Step-by-step guide for new users.
-
-## Advanced Usage
-More complex scenarios and configurations.
-
-## Troubleshooting
-Common issues and solutions.
-`,
+        content: `# Documentation\n\n## Overview\nMain documentation.\n\n## Getting Started\nStep-by-step guide.\n`,
       },
     ];
   }
 
-  // Generate starter files for features mentioned in input
-  const files = [];
-  const lower = input.toLowerCase();
-
-  if (/android|kotlin|java/.test(lower)) {
-    if (/theme|color|style/.test(lower)) {
-      files.push({
-        filename: 'ThemeConfig.kt',
-        content: `// Theme configuration for the app
-object ThemeConfig {
-    enum class Theme {
-        LIGHT_BLUE,
-        LIGHT_GREEN,
-        LIGHT_PURPLE,
-        DARK_BLUE,
-        DARK_GREEN,
-        DARK_PURPLE
-    }
-
-    fun applyTheme(context: Context, theme: Theme) {
-        // Apply theme to app
-    }
-
-    fun getRandomTheme(): Theme {
-        return Theme.values().random()
-    }
-}
-`,
-      });
-
-      files.push({
-        filename: 'SettingsFragment.kt',
-        content: `// Settings screen with theme selector
-class SettingsFragment : Fragment() {
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-
-        val themeButton = view.findViewById<Button>(R.id.random_theme_button)
-        themeButton.setOnClickListener {
-            val newTheme = ThemeConfig.getRandomTheme()
-            ThemeConfig.applyTheme(requireContext(), newTheme)
-            // Save preference
-        }
-    }
-}
-`,
-      });
-    }
-  }
-
-  if (/ios|swift/.test(lower)) {
-    if (/theme|color|style/.test(lower)) {
-      files.push({
-        filename: 'ThemeManager.swift',
-        content: `// Theme management for iOS app
-class ThemeManager {
-    enum Theme: CaseIterable {
-        case lightBlue
-        case lightGreen
-        case lightPurple
-        case darkBlue
-        case darkGreen
-        case darkPurple
-    }
-
-    static func applyTheme(_ theme: Theme) {
-        // Apply theme colors to app
-    }
-
-    static func randomTheme() -> Theme {
-        return Theme.allCases.randomElement() ?? .lightBlue
-    }
-}
-`,
-      });
-    }
-  }
-
-  if (/web|react|vue|angular/.test(lower)) {
-    if (/theme|color|style|dark|light/.test(lower)) {
-      files.push({
-        filename: 'theme.config.js',
-        content: `// Theme configuration
-export const themes = {
-  LIGHT_BLUE: { name: 'Light Blue', primary: '#3b82f6', isDark: false },
-  LIGHT_GREEN: { name: 'Light Green', primary: '#10b981', isDark: false },
-  LIGHT_PURPLE: { name: 'Light Purple', primary: '#a855f7', isDark: false },
-  DARK_BLUE: { name: 'Dark Blue', primary: '#1e3a8a', isDark: true },
-  DARK_GREEN: { name: 'Dark Green', primary: '#064e3b', isDark: true },
-  DARK_PURPLE: { name: 'Dark Purple', primary: '#581c87', isDark: true },
-};
-
-export function getRandomTheme() {
-  const themeKeys = Object.keys(themes);
-  return themes[themeKeys[Math.floor(Math.random() * themeKeys.length)]];
-}
-`,
-      });
-
-      files.push({
-        filename: 'Settings.jsx',
-        content: `// Settings component with theme selector
-export function Settings() {
-  const [currentTheme, setCurrentTheme] = useState(themes.LIGHT_BLUE);
-
-  const handleRandomTheme = () => {
-    const newTheme = getRandomTheme();
-    setCurrentTheme(newTheme);
-    applyThemeToDOM(newTheme);
-    localStorage.setItem('theme', JSON.stringify(newTheme));
-  };
-
-  return (
-    <div className="settings">
-      <h2>Settings</h2>
-      <button onClick={handleRandomTheme}>
-        Random Theme
-      </button>
-      <p>Current: {currentTheme.name}</p>
-    </div>
-  );
-}
-`,
-      });
-    }
-  }
-
-  return files;
+  return [];
 }
 
 function generatePlan(numSessions) {

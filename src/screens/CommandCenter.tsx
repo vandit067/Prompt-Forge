@@ -1286,6 +1286,7 @@ export function CommandCenter({
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
   const [activeTab, setActiveTab] = useState<OutputTab>('prompts');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -1303,6 +1304,22 @@ export function CommandCenter({
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSubmit();
+  }
+
+  function handleSelectFolder() {
+    folderInputRef.current?.click();
+  }
+
+  function handleFolderChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.currentTarget.files;
+    if (files && files.length > 0) {
+      const firstFilePath = files[0].webkitRelativePath || files[0].name;
+      const folderPath = firstFilePath.split('/')[0];
+      setProjectPath(folderPath);
+      if (onScanProject) {
+        onScanProject(folderPath);
+      }
+    }
   }
 
   const TABS: { id: OutputTab; label: string; icon: React.ReactNode }[] = [
@@ -1382,6 +1399,7 @@ export function CommandCenter({
               fontFamily: '"Inter", system-ui, sans-serif',
               lineHeight: '1.6',
               display: 'block',
+              verticalAlign: 'top',
             }}
           />
         </div>
@@ -1468,16 +1486,10 @@ export function CommandCenter({
                   {projectPath}
                 </span>
                 <button
-                  onClick={() => {
-                    const p = window.prompt('Enter project path:', projectPath);
-                    if (p) {
-                      setProjectPath(p);
-                      onScanProject?.(p);
-                    }
-                  }}
+                  onClick={handleSelectFolder}
                   style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '10px', cursor: 'pointer', padding: 0 }}
                 >
-                  change
+                  browse
                 </button>
               </div>
             )}
@@ -1720,6 +1732,15 @@ export function CommandCenter({
           </div>
         )}
       </div>
+
+      {/* Hidden folder picker */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        onChange={handleFolderChange}
+        style={{ display: 'none' }}
+        {...({ webkitdirectory: true } as any)}
+      />
     </div>
   );
 }

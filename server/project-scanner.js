@@ -18,10 +18,12 @@ export async function scanProject(folderPath) {
   const spec = readSafe(join(folderPath, 'SPEC.md'));
   const claude = readSafe(join(folderPath, 'CLAUDE.md'));
   const prompts = readSafe(join(folderPath, 'PROMPTS.md'));
+  const readme = readSafe(join(folderPath, 'README.md'));
 
   // Detect tech stack from package.json or requirements.txt
   const pkg = readJsonSafe(join(folderPath, 'package.json'));
-  const techStack = detectTechStack(pkg);
+  const requirements = readSafe(join(folderPath, 'requirements.txt'));
+  const techStack = detectTechStack(pkg, requirements);
 
   // Extract text from SPEC.md and CLAUDE.md
   const specPurpose = spec ? extractSpecPurpose(spec) : undefined;
@@ -32,7 +34,9 @@ export async function scanProject(folderPath) {
     { filename: 'SPEC.md', found: !!spec },
     { filename: 'CLAUDE.md', found: !!claude },
     { filename: 'PROMPTS.md', found: !!prompts },
+    { filename: 'README.md', found: !!readme },
     { filename: 'package.json', found: !!pkg },
+    { filename: 'requirements.txt', found: !!requirements },
   ];
 
   const hasCompanionFiles = !!spec || !!claude;
@@ -80,31 +84,44 @@ function readJsonSafe(filePath) {
   }
 }
 
-function detectTechStack(pkg) {
-  if (!pkg) return [];
-
+function detectTechStack(pkg, requirements) {
   const stack = new Set();
-  const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
 
   // Node/JavaScript/TypeScript
-  if (allDeps.typescript) stack.add('TypeScript');
-  if (allDeps.react) stack.add('React');
-  if (allDeps.vue) stack.add('Vue');
-  if (allDeps.svelte) stack.add('Svelte');
-  if (allDeps.express) stack.add('Express');
-  if (allDeps.fastify) stack.add('Fastify');
-  if (allDeps.nest || allDeps['@nestjs/core']) stack.add('NestJS');
-  if (allDeps.vite) stack.add('Vite');
-  if (allDeps.webpack) stack.add('Webpack');
-  if (allDeps.jest) stack.add('Jest');
-  if (allDeps['better-sqlite3'] || allDeps.sqlite3) stack.add('SQLite');
-  if (allDeps.postgres || allDeps.pg) stack.add('PostgreSQL');
-  if (allDeps.mongodb || allDeps.mongoose) stack.add('MongoDB');
-  if (allDeps.zod) stack.add('Zod');
+  if (pkg) {
+    const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+    if (allDeps.typescript) stack.add('TypeScript');
+    if (allDeps.react) stack.add('React');
+    if (allDeps.vue) stack.add('Vue');
+    if (allDeps.svelte) stack.add('Svelte');
+    if (allDeps.express) stack.add('Express');
+    if (allDeps.fastify) stack.add('Fastify');
+    if (allDeps.nest || allDeps['@nestjs/core']) stack.add('NestJS');
+    if (allDeps.vite) stack.add('Vite');
+    if (allDeps.webpack) stack.add('Webpack');
+    if (allDeps.jest) stack.add('Jest');
+    if (allDeps['better-sqlite3'] || allDeps.sqlite3) stack.add('SQLite');
+    if (allDeps.postgres || allDeps.pg) stack.add('PostgreSQL');
+    if (allDeps.mongodb || allDeps.mongoose) stack.add('MongoDB');
+    if (allDeps.zod) stack.add('Zod');
 
-  // If no specific tech detected, infer from package.json
-  if (stack.size === 0 && pkg.name) {
-    stack.add('Node.js');
+    if (stack.size === 0 && pkg.name) {
+      stack.add('Node.js');
+    }
+  }
+
+  // Python detection
+  if (requirements) {
+    stack.add('Python');
+    if (requirements.includes('django')) stack.add('Django');
+    if (requirements.includes('flask')) stack.add('Flask');
+    if (requirements.includes('fastapi')) stack.add('FastAPI');
+    if (requirements.includes('pytest')) stack.add('pytest');
+    if (requirements.includes('numpy')) stack.add('NumPy');
+    if (requirements.includes('pandas')) stack.add('Pandas');
+    if (requirements.includes('scikit-learn')) stack.add('scikit-learn');
+    if (requirements.includes('tensorflow') || requirements.includes('torch')) stack.add('ML/DL');
+    if (requirements.includes('sqlalchemy')) stack.add('SQLAlchemy');
   }
 
   return Array.from(stack).sort();

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Layout } from 'lucide-react';
+import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
 import type { Task, OutputTab, ProjectMode } from '../types';
@@ -464,6 +464,7 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating }: Props) 
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
+  const [activeTab, setActiveTab] = useState<OutputTab>('prompts');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -484,7 +485,12 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating }: Props) 
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSubmit();
   }
 
-  const showOutput = isGenerating || currentTask !== null;
+  const TABS: { id: OutputTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'prompts',   label: 'Prompts',   icon: <Zap size={13} /> },
+    { id: 'files',     label: 'Files',     icon: <FileText size={13} /> },
+    { id: 'plan',      label: 'Plan',      icon: <List size={13} /> },
+    { id: 'checklist', label: 'Checklist', icon: <CheckSquare size={13} /> },
+  ];
 
   return (
     <div
@@ -696,102 +702,78 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating }: Props) 
         {/* Project context (when existing mode) */}
         {projectMode === 'existing' && <ProjectContextCard />}
 
-        {/* Output panel */}
-        {showOutput && (
-          <div>
-            {isGenerating ? (
-              <div
-                style={{
-                  background: '#0f0f12',
-                  border: '1px solid #1c1c22',
-                  borderRadius: '12px',
-                  padding: '16px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                  <div
-                    style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: '#22c55e',
-                      animation: 'pulse 1s ease-in-out infinite',
-                    }}
-                  />
-                  <span style={{ fontSize: '12px', color: '#71717a', fontFamily: '"JetBrains Mono", monospace' }}>
-                    Classifying task → loading context → generating prompts…
-                  </span>
-                  <style>{`@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }`}</style>
-                </div>
-                <GeneratingState />
-              </div>
-            ) : currentTask ? (
-              <OutputPanel task={currentTask} />
-            ) : null}
-          </div>
-        )}
-
-        {/* Empty state */}
-        {!showOutput && (
+        {/* Tabbed output panel — always visible */}
+        <div
+          style={{
+            background: '#0f0f12',
+            border: '1px solid #1c1c22',
+            borderRadius: '12px',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Tab bar */}
           <div
             style={{
-              flex: 1,
               display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '40px 20px',
-              gap: '12px',
+              borderBottom: '1px solid #1c1c22',
+              background: '#0a0a0d',
+              padding: '0 4px',
             }}
           >
-            <div
-              style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: '#0f0f12',
-                border: '1px solid #1c1c22',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Layout size={20} color="#3c3c48" />
-            </div>
-            <p style={{ margin: 0, color: '#52525b', fontSize: '13px', textAlign: 'center', maxWidth: '340px', lineHeight: '1.6' }}>
-              Describe your engineering task above and click <strong style={{ color: '#71717a' }}>Generate</strong> to get structured Claude Code prompts, session plans, and verification checklists.
-            </p>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '4px' }}>
-              {['Build a CLI tool', 'Fix a bug', 'Refactor a module', 'Code review', 'Write docs'].map(example => (
-                <button
-                  key={example}
-                  onClick={() => setInput(example + '…')}
-                  style={{
-                    padding: '4px 10px',
-                    background: '#0f0f12',
-                    border: '1px solid #1c1c22',
-                    borderRadius: '6px',
-                    color: '#71717a',
-                    fontSize: '11px',
-                    fontFamily: '"JetBrains Mono", monospace',
-                    cursor: 'pointer',
-                    transition: 'color 0.12s, border-color 0.12s',
-                  }}
-                  onMouseEnter={e => {
-                    (e.currentTarget as HTMLButtonElement).style.color = '#fafafa';
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#3c3c48';
-                  }}
-                  onMouseLeave={e => {
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '11px 16px',
+                  border: 'none',
+                  borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : '2px solid transparent',
+                  background: 'transparent',
+                  color: activeTab === tab.id ? '#fafafa' : '#71717a',
+                  fontSize: '12px',
+                  fontFamily: '"Inter", system-ui, sans-serif',
+                  fontWeight: activeTab === tab.id ? 500 : 400,
+                  cursor: 'pointer',
+                  transition: 'color 0.12s',
+                  marginBottom: '-1px',
+                }}
+                onMouseEnter={e => {
+                  if (activeTab !== tab.id)
+                    (e.currentTarget as HTMLButtonElement).style.color = '#d4d4d8';
+                }}
+                onMouseLeave={e => {
+                  if (activeTab !== tab.id)
                     (e.currentTarget as HTMLButtonElement).style.color = '#71717a';
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#1c1c22';
-                  }}
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
+                }}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
           </div>
-        )}
+
+          {/* Tab content */}
+          <div
+            style={{
+              padding: '28px 24px',
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: '12px',
+              color: '#52525b',
+              minHeight: '180px',
+              display: 'flex',
+              alignItems: 'center',
+              lineHeight: '1.7',
+            }}
+          >
+            {activeTab === 'prompts'   && 'Prompts will appear here.'}
+            {activeTab === 'files'     && 'Generated files (SPEC.md, CLAUDE.md) will appear here.'}
+            {activeTab === 'plan'      && 'Session plan will appear here.'}
+            {activeTab === 'checklist' && 'Verification checklist will appear here.'}
+          </div>
+        </div>
       </div>
     </div>
   );

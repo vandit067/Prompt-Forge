@@ -102,7 +102,9 @@ app.post('/api/scan-project', async (req, res) => {
 
 // POST /api/generate — generate a new task via Claude Code CLI
 app.post('/api/generate', async (req, res) => {
+  console.log('POST /api/generate received');
   const { input, projectPath, projectContext, taskType } = req.body;
+  console.log('Input length:', input?.length, 'Task type:', taskType);
 
   if (!input?.trim()) {
     return res.status(400).json({ error: 'input required' });
@@ -110,10 +112,12 @@ app.post('/api/generate', async (req, res) => {
 
   let kill = null;
   req.on('close', () => {
+    console.log('Request closed');
     if (kill) kill();
   });
 
   try {
+    console.log('Building known issues block...');
     // Build known issues block from past failures
     let knownIssues = null;
     if (taskType) {
@@ -124,6 +128,7 @@ app.post('/api/generate', async (req, res) => {
       }
     }
 
+    console.log('Calling spawnClaude...');
     const parsed = await spawnClaude(input, {
       onAbort: (fn) => {
         kill = fn;
@@ -131,6 +136,7 @@ app.post('/api/generate', async (req, res) => {
       projectContext: projectContext?.promptBlock,
       knownIssues,
     });
+    console.log('spawnClaude returned successfully');
 
     const task = buildTask(parsed, input, projectPath, projectContext);
     stmts.insertTask.run({
@@ -151,13 +157,17 @@ app.post('/api/generate', async (req, res) => {
 
     res.json(task);
   } catch (err) {
+    console.error('Error in /api/generate:', err.code, err.message || err);
     if (err.code === 'CANCELLED') {
+      console.error('Process was cancelled');
       return res.status(499).json({ error: 'cancelled' });
     }
     if (err.code === 'CLI_NOT_INSTALLED') {
+      console.error('CLI not installed');
       return res.status(422).json({ error: 'CLI_NOT_INSTALLED' });
     }
     if (err.code === 'PARSE_ERROR') {
+      console.error('Parse error, using fallback');
       // Fallback: output raw response as a single prompt
       const task = buildFallbackTask(input, err.raw, projectPath, projectContext);
       stmts.insertTask.run({
@@ -177,6 +187,7 @@ app.post('/api/generate', async (req, res) => {
       });
       return res.json(task);
     }
+    console.error('Returning 500 error:', err.code, err.message);
     res.status(500).json({
       error: err.message || 'Generation failed',
       code: err.code,

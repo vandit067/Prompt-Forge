@@ -1384,178 +1384,176 @@ export function CommandCenter({
               display: 'block',
             }}
           />
+        </div>
 
-          {/* Bottom bar */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 14px',
-              borderTop: '1px solid #1c1c22',
-              background: '#0a0a0d',
-            }}
-          >
-            {/* Project mode toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+        {/* Controls bar — separate from textarea */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '12px 0',
+          }}
+        >
+          {/* Project mode toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
+            <div
+              style={{
+                display: 'flex',
+                background: colors.bgInput,
+                border: `1px solid ${colors.border}`,
+                borderRadius: radius.md,
+                padding: space.xs,
+                gap: space.xs,
+              }}
+            >
+              {(['new', 'existing'] as const).map(mode => (
+                <button
+                  key={mode}
+                  onClick={() => setProjectMode(mode)}
+                  style={{
+                    padding: `${space.xs} ${space.md}`,
+                    borderRadius: radius.sm,
+                    border: projectMode === mode ? `1px solid ${colors.blue}` : '1px solid transparent',
+                    background: projectMode === mode ? colors.blueBg : colors.bgInput,
+                    color: projectMode === mode ? colors.blueLight : colors.fgHover,
+                    fontSize: '11px',
+                    fontFamily: fonts.sans,
+                    fontWeight: projectMode === mode ? 600 : 500,
+                    cursor: 'pointer',
+                    transition: transitions.fast,
+                  }}
+                  onMouseEnter={e => {
+                    if (projectMode !== mode) {
+                      (e.currentTarget as HTMLButtonElement).style.background = colors.borderLight;
+                      (e.currentTarget as HTMLButtonElement).style.color = colors.fg;
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (projectMode !== mode) {
+                      (e.currentTarget as HTMLButtonElement).style.background = colors.bgInput;
+                      (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
+                    }
+                  }}
+                >
+                  {mode === 'new' ? 'New Project' : 'Existing Project'}
+                </button>
+              ))}
+            </div>
+
+            {projectMode === 'existing' && (
               <div
                 style={{
                   display: 'flex',
-                  background: colors.bgInput,
-                  border: `1px solid ${colors.border}`,
-                  borderRadius: radius.md,
-                  padding: space.xs,
-                  gap: space.xs,
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: '#18181b',
+                  border: '1px solid #1c1c22',
+                  borderRadius: '6px',
+                  padding: '4px 10px',
                 }}
               >
-                {(['new', 'existing'] as const).map(mode => (
-                  <button
-                    key={mode}
-                    onClick={() => setProjectMode(mode)}
-                    style={{
-                      padding: `${space.xs} ${space.md}`,
-                      borderRadius: radius.sm,
-                      border: projectMode === mode ? `1px solid ${colors.blue}` : '1px solid transparent',
-                      background: projectMode === mode ? colors.blueBg : colors.bgInput,
-                      color: projectMode === mode ? colors.blueLight : colors.fgHover,
-                      fontSize: '11px',
-                      fontFamily: fonts.sans,
-                      fontWeight: projectMode === mode ? 600 : 500,
-                      cursor: 'pointer',
-                      transition: transitions.fast,
-                    }}
-                    onMouseEnter={e => {
-                      if (projectMode !== mode) {
-                        (e.currentTarget as HTMLButtonElement).style.background = colors.borderLight;
-                        (e.currentTarget as HTMLButtonElement).style.color = colors.fg;
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (projectMode !== mode) {
-                        (e.currentTarget as HTMLButtonElement).style.background = colors.bgInput;
-                        (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
-                      }
-                    }}
-                  >
-                    {mode === 'new' ? 'New Project' : 'Existing Project'}
-                  </button>
-                ))}
-              </div>
-
-              {projectMode === 'existing' && (
-                <div
+                <FolderOpen size={12} color="#71717a" />
+                <span
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: '#18181b',
-                    border: '1px solid #1c1c22',
-                    borderRadius: '6px',
-                    padding: '4px 10px',
+                    fontSize: '11px',
+                    fontFamily: '"JetBrains Mono", monospace',
+                    color: '#a1a1aa',
+                    maxWidth: '200px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  <FolderOpen size={12} color="#71717a" />
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      fontFamily: '"JetBrains Mono", monospace',
-                      color: '#a1a1aa',
-                      maxWidth: '200px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {projectPath}
-                  </span>
-                  <button
-                    onClick={() => {
-                      const p = window.prompt('Enter project path:', projectPath);
-                      if (p) {
-                        setProjectPath(p);
-                        onScanProject?.(p);
-                      }
-                    }}
-                    style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '10px', cursor: 'pointer', padding: 0 }}
-                  >
-                    change
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Submit / Cancel */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {!isGenerating && (
-                <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
-                  ⌘↵
+                  {projectPath}
                 </span>
-              )}
-              {isGenerating && onCancel ? (
                 <button
-                  onClick={onCancel}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    borderRadius: '7px',
-                    border: 'none',
-                    background: '#dc2626',
-                    color: '#fff',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.12s',
-                    fontFamily: '"Inter", system-ui, sans-serif',
+                  onClick={() => {
+                    const p = window.prompt('Enter project path:', projectPath);
+                    if (p) {
+                      setProjectPath(p);
+                      onScanProject?.(p);
+                    }
                   }}
+                  style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '10px', cursor: 'pointer', padding: 0 }}
                 >
-                  Cancel
+                  change
                 </button>
-              ) : (
-                <button
-                  onClick={handleSubmit}
-                  disabled={!input.trim() || isGenerating}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '8px 16px',
-                    borderRadius: '7px',
-                    border: 'none',
-                    background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
-                    color: !input.trim() || isGenerating ? '#52525b' : '#000',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.12s',
-                    fontFamily: '"Inter", system-ui, sans-serif',
-                  }}
-                >
-                  {isGenerating ? (
-                    <>
-                      <div
-                        style={{
-                          width: '12px',
-                          height: '12px',
-                          border: '1.5px solid #52525b',
-                          borderTopColor: '#22c55e',
-                          borderRadius: '50%',
-                          animation: 'spin 0.8s linear infinite',
-                        }}
-                      />
-                      Generating…
-                      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                    </>
-                  ) : (
-                    <>
-                      <Send size={13} />
-                      Generate
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
+
+          {/* Submit / Cancel */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {!isGenerating && (
+              <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+                ⌘↵
+              </span>
+            )}
+            {isGenerating && onCancel ? (
+              <button
+                onClick={onCancel}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  background: '#dc2626',
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.12s',
+                  fontFamily: '"Inter", system-ui, sans-serif',
+                }}
+              >
+                Cancel
+              </button>
+            ) : (
+              <button
+                onClick={handleSubmit}
+                disabled={!input.trim() || isGenerating}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 16px',
+                  borderRadius: '7px',
+                  border: 'none',
+                  background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
+                  color: !input.trim() || isGenerating ? '#52525b' : '#000',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.12s',
+                  fontFamily: '"Inter", system-ui, sans-serif',
+                }}
+              >
+                {isGenerating ? (
+                  <>
+                    <div
+                      style={{
+                        width: '12px',
+                        height: '12px',
+                        border: '1.5px solid #52525b',
+                        borderTopColor: '#22c55e',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite',
+                      }}
+                    />
+                    Generating…
+                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                  </>
+                ) : (
+                  <>
+                    <Send size={13} />
+                    Generate
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
 

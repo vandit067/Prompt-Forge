@@ -85,7 +85,7 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
       </div>
 
       {/* Tab content */}
-      <div style={{ padding: space.lg }}>
+      <div style={{ flex: 1, padding: space.lg, overflowY: 'auto' }}>
         {activeTab === 'prompts' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
             {task.generatedPrompts.map((prompt) => (

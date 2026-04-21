@@ -364,27 +364,37 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onDeleteTask(task.id);
+                        if (confirm(`Delete task: ${task.title}?`)) {
+                          onDeleteTask(task.id);
+                        }
                       }}
-                      title="Delete task"
+                      title="Delete task (click to confirm)"
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: '#52525b',
+                        color: '#71717a',
                         cursor: 'pointer',
-                        padding: '0 2px',
+                        padding: '2px 6px',
                         display: 'flex',
                         alignItems: 'center',
-                        fontSize: '12px',
+                        fontSize: '16px',
+                        fontWeight: 'bold',
+                        lineHeight: 1,
+                        borderRadius: '4px',
+                        transition: 'all 0.2s',
                       }}
                       onMouseEnter={e => {
-                        (e.currentTarget as HTMLButtonElement).style.color = '#ef4444';
+                        const btn = e.currentTarget as HTMLButtonElement;
+                        btn.style.color = '#ef4444';
+                        btn.style.background = '#1c1c22';
                       }}
                       onMouseLeave={e => {
-                        (e.currentTarget as HTMLButtonElement).style.color = '#52525b';
+                        const btn = e.currentTarget as HTMLButtonElement;
+                        btn.style.color = '#71717a';
+                        btn.style.background = 'none';
                       }}
                     >
-                      ×
+                      🗑
                     </button>
                   )}
                 </div>

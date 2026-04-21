@@ -51,61 +51,138 @@ function generatePrompts(input, taskType) {
   // Extract platforms and features from input
   const platforms = extractPlatforms(input);
   const features = extractFeatures(input);
-  const platformContext = platforms.length > 0 ? `Target platforms: ${platforms.join(', ')}` : '';
+  const platformContext = platforms.length > 0 ? `Target platforms: ${platforms.join(', ')}` : 'Target platform: Not specified (infer from context)';
 
   const featureList = features.length > 0
     ? `\nKey features to implement:\n${features.map(f => `- ${f}`).join('\n')}`
-    : '';
+    : '\nKey features: Infer from request context and implement core functionality';
+
+  const sessionCount = input.length > 100 ? 2 : 1;
+  const needsArchitecture = platforms.length > 1 || input.toLowerCase().includes('architecture');
+
+  const architectureSection = needsArchitecture ? `
+
+Architecture Guidance:
+- If multiple platforms: design shared business logic layer separate from UI
+- Consider a modular approach: core engine → platform-specific wrappers
+- Use dependency injection for testability
+- Separate concerns: models, services, UI components` : '';
 
   const basePrompt = `Context: User request: "${input}"
 ${platformContext}${featureList}
 
 Requirements:
-1. Implement all features mentioned above
-2. Ensure cross-platform compatibility (if applicable)
-3. Handle errors gracefully with user-friendly messages
-4. Follow platform-specific conventions and UX patterns
+1. Implement all features mentioned in the request
+2. Follow best practices for code organization and maintainability
+3. Handle edge cases and errors gracefully with user-friendly messages
+4. If multiple platforms: ensure consistent behavior across all platforms
+${needsArchitecture ? '5. Design architecture to minimize code duplication' : ''}
 
-Steps:
-1. Break down requirements into well-defined features
-2. Plan architecture for cross-platform code sharing
-3. Implement core functionality with clean, modular code
+Design Considerations:${architectureSection}
+
+Implementation Steps:
+1. Analyze requirements and identify all features needed
+2. Plan code structure and module organization
+3. Implement core functionality with clean, readable code
 4. Add comprehensive error handling and validation
-5. Test on all target platforms
-6. Verify performance and user experience
+5. Implement UI/UX following platform conventions
+6. Add proper logging and debugging capabilities
+7. Write tests for critical functionality
+8. Optimize performance and resource usage
 
-Constraints:
-- Use platform-specific best practices
-- Keep common code DRY and reusable
-- No hardcoded configuration values
-- Include only necessary comments
+Code Quality Requirements:
+- Clean, readable variable and function names
+- DRY principle: avoid code duplication
+- Proper error handling at all levels
+- No hardcoded values that should be configurable
+- Comments only for non-obvious logic
+- Follow language/platform style conventions
 
-Verification:
-- All features from requirements are working
-- No crashes or unhandled errors
-- App runs smoothly on all target platforms
-- Code follows language/platform conventions`;
+Testing & Validation:
+- Manual testing of happy path and edge cases
+- Test with invalid/unexpected input
+- Verify error messages are helpful
+- Check performance with realistic data
+- Ensure app doesn't crash under stress
 
-  return [
+Verification Checklist:
+- All features from requirements work correctly
+- No unhandled errors or crashes
+- Code is readable and maintainable
+- Performance is acceptable
+- UI feels native and responsive`;
+
+  const prompts = [
     {
       id: 'prompt-1',
-      sessionLabel: 'Session 1 — Implementation',
+      sessionLabel: sessionCount > 1 ? 'Session 1 — Architecture & Core' : 'Session 1 — Implementation',
       content: basePrompt + `
+
+${sessionCount === 1 ? `
 
 Validation Audit:
 Before we finish, do a full audit. Do NOT change any code yet. Just report:
 
-1. **Requirements Met**: Does the implementation include all features mentioned above?
-2. **Cross-Platform**: Does it work correctly on ${platforms.join(' and ')}?
-3. **Code Quality**: Check for errors, unused code, hardcoded values, missing error handling
-4. **Edge Cases**: What breaks if user provides invalid input or uses features unexpectedly?
-5. **User Experience**: Are errors clear? Does the UI feel native to each platform?
+1. **Requirements Met**: Does implementation include all features mentioned?
+2. **Code Quality**: Check for errors, unused code, hardcoded values, missing error handling
+3. **Completeness**: Are all features fully implemented and tested?
+4. **Edge Cases**: What breaks if user provides invalid input or unexpected data?
+5. **User Experience**: Are errors clear and helpful? Does the app feel polished?
+6. ${platforms.length > 0 ? `**Platform Specifics**: Does it work correctly on ${platforms.join(' and ')}?` : '**Architecture**: Is code well-organized and maintainable?'}
 
 Show me the complete audit report. Do not make changes yet.
 
-After audit: "Fix all gaps found in the audit, smallest first. Commit after each fix."`,
+After audit: "Fix all gaps found in the audit, smallest first. Commit after each fix."` : `
+
+This session focuses on architecture and core implementation. Session 2 will handle UI/testing.`}`,
     },
   ];
+
+  if (sessionCount > 1) {
+    prompts.push({
+      id: 'prompt-2',
+      sessionLabel: 'Session 2 — UI, Testing & Polish (Final)',
+      content: `Context: Continue from Session 1 - core implementation complete
+
+Remaining Work:
+1. Build complete user interface following platform conventions
+2. Integrate core functionality into UI
+3. Add comprehensive testing (unit and integration)
+4. Optimize performance
+5. Final polish and edge case handling
+
+UI/UX Requirements:
+- Intuitive navigation and clear information hierarchy
+- Responsive to different screen sizes (if applicable)
+- Accessible controls and readable text
+- Proper loading states and error messages
+- Smooth animations and transitions
+- Platform-native look and feel
+
+Testing Requirements:
+- Test all user flows and feature interactions
+- Test with edge case and invalid inputs
+- Verify error handling with graceful recovery
+- Performance testing with realistic data
+- Cross-platform compatibility (if applicable)
+
+Final Validation:
+Before we finish, do a full audit. Report (do NOT fix yet):
+
+1. **Requirements**: Are all features fully implemented and working?
+2. **Code Quality**: No errors, unused code, hardcoded values, or missing error handling
+3. **Testing**: All features tested, edge cases covered, error handling works
+4. **UI/UX**: Responsive, accessible, native feel, clear feedback to users
+5. **Performance**: App is fast and doesn't lag or crash
+6. **Polish**: Code is well-organized, documented where needed, ready for production
+
+Show the complete audit report. Do not make changes yet.
+
+After audit: "Fix all gaps found in the audit, smallest first. Commit after each fix."`,
+    });
+  }
+
+  return prompts;
 }
 
 function extractPlatforms(input) {

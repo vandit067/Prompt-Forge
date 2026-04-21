@@ -219,17 +219,90 @@ function extractFeatures(input) {
 }
 
 function generateFiles(taskType, input = '') {
-  if (taskType === 'NEW_TOOL') {
+  const isNewFeature = taskType === 'NEW_FEATURE';
+
+  if (taskType === 'NEW_TOOL' || isNewFeature) {
     return [
       {
         id: 'file-spec',
         filename: 'SPEC.md',
-        content: `# Project Specification\n\n## Purpose\nDescription of what this tool/project does.\n\n## Features\n- Feature 1\n- Feature 2\n\n## Architecture\nHigh-level design.\n`,
+        content: `# ${isNewFeature ? 'Feature' : 'Project'} Specification
+
+## Purpose
+${isNewFeature ? 'Description of the feature being implemented.' : 'Description of what this tool/project does.'}
+
+## Requirements
+${isNewFeature ? `
+- User-facing functionality
+- Backend/internal logic
+- Edge cases and error handling
+` : `
+- Core features
+- Secondary features
+- Future enhancements
+`}
+
+## Implementation Details
+${isNewFeature ? `
+- Which components are affected
+- Any dependencies required
+- Breaking changes (if any)
+- Backward compatibility concerns
+` : `
+- Architecture overview
+- Technology choices
+- Key modules
+- Data flow
+`}
+
+## Testing Strategy
+- Happy path scenarios
+- Edge cases
+- Error conditions
+- ${isNewFeature ? 'Integration with existing features' : 'Cross-platform compatibility'}
+
+## Acceptance Criteria
+- [ ] Feature works as specified
+- [ ] No regressions in existing functionality
+- [ ] Code follows project standards
+- [ ] Tests pass
+- [ ] Documentation updated
+`,
       },
       {
         id: 'file-claude',
         filename: 'CLAUDE.md',
-        content: `# CLAUDE.md\n\nGuidelines for this project.\n\n## Rules\n- Keep code modular\n- Use meaningful names\n`,
+        content: `# CLAUDE.md - Implementation Guide
+
+## Overview
+${isNewFeature ? 'Guidelines for implementing this feature.' : 'Guidelines for working on this project.'}
+
+## Key Points
+- Read SPEC.md before starting implementation
+- Follow existing code patterns and conventions
+- Write tests as you go, not after
+- Keep commits atomic and focused
+
+## Code Quality
+- Use meaningful variable and function names
+- Keep functions focused (single responsibility)
+- No hardcoded values - use constants or config
+- Comments only for complex/non-obvious logic
+- DRY principle: avoid code duplication
+
+## Testing
+- Write unit tests for business logic
+- Write integration tests for feature flows
+- Test edge cases and error conditions
+- ${isNewFeature ? 'Test interaction with related features' : 'Test on all target platforms'}
+
+## Before Submitting
+- [ ] All tests pass
+- [ ] No console errors/warnings
+- [ ] Code is reviewed for quality
+- [ ] SPEC.md acceptance criteria met
+- [ ] Documentation/comments added
+`,
       },
     ];
   }
@@ -239,7 +312,26 @@ function generateFiles(taskType, input = '') {
       {
         id: 'file-docs',
         filename: 'DOCUMENTATION.md',
-        content: `# Documentation\n\n## Overview\nMain documentation.\n\n## Getting Started\nStep-by-step guide.\n`,
+        content: `# Documentation
+
+## Overview
+Main documentation for this project/feature.
+
+## Getting Started
+Step-by-step guide for getting up and running.
+
+## Features
+Description of each major feature.
+
+## API Reference (if applicable)
+Documentation of functions, endpoints, or modules.
+
+## Troubleshooting
+Common issues and how to solve them.
+
+## Contributing
+Guidelines for contributing to this project.
+`,
       },
     ];
   }

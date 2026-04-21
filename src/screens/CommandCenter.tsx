@@ -1296,6 +1296,13 @@ export function CommandCenter({
     el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   }, [input]);
 
+  // Auto-focus textarea and clear input after generation
+  useEffect(() => {
+    if (!isGenerating && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isGenerating]);
+
   function handleSubmit() {
     console.log('handleSubmit called', { input: input.trim(), isGenerating });
     if (!input.trim() || isGenerating) {

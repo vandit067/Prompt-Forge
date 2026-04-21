@@ -48,26 +48,43 @@ function generateTaskSpec(input, taskType) {
 }
 
 function generatePrompts(input, taskType) {
+  // Extract platforms and features from input
+  const platforms = extractPlatforms(input);
+  const features = extractFeatures(input);
+  const platformContext = platforms.length > 0 ? `Target platforms: ${platforms.join(', ')}` : '';
+
+  const featureList = features.length > 0
+    ? `\nKey features to implement:\n${features.map(f => `- ${f}`).join('\n')}`
+    : '';
+
   const basePrompt = `Context: User request: "${input}"
+${platformContext}${featureList}
+
+Requirements:
+1. Implement all features mentioned above
+2. Ensure cross-platform compatibility (if applicable)
+3. Handle errors gracefully with user-friendly messages
+4. Follow platform-specific conventions and UX patterns
 
 Steps:
-1. Understand the requirements and acceptance criteria
-2. Plan the implementation approach and technical decisions
-3. Write clear, modular code following best practices
-4. Test thoroughly with various inputs and edge cases
-5. Ensure error handling and user feedback are appropriate
+1. Break down requirements into well-defined features
+2. Plan architecture for cross-platform code sharing
+3. Implement core functionality with clean, modular code
+4. Add comprehensive error handling and validation
+5. Test on all target platforms
+6. Verify performance and user experience
 
 Constraints:
-- Write clean, maintainable code
-- Follow language-specific conventions and idioms
-- Add comments only for non-obvious logic
-- No hardcoded values that should be configurable
+- Use platform-specific best practices
+- Keep common code DRY and reusable
+- No hardcoded configuration values
+- Include only necessary comments
 
 Verification:
-- Type checking passes (if applicable)
-- All tests pass
-- Manual testing confirms expected behavior
-- No console errors or warnings`;
+- All features from requirements are working
+- No crashes or unhandled errors
+- App runs smoothly on all target platforms
+- Code follows language/platform conventions`;
 
   return [
     {
@@ -78,17 +95,50 @@ Verification:
 Validation Audit:
 Before we finish, do a full audit. Do NOT change any code yet. Just report:
 
-1. **Spec compliance**: Compare what was built against the requirements in this prompt
-2. **Code quality**: Check for any errors, unused imports, console.logs left in
-3. **Edge cases**: Identify 3 things that could break with unexpected input
-4. **Testing**: Verify all manual tests passed
-5. **User experience**: Check that feedback and error messages are clear
+1. **Requirements Met**: Does the implementation include all features mentioned above?
+2. **Cross-Platform**: Does it work correctly on ${platforms.join(' and ')}?
+3. **Code Quality**: Check for errors, unused code, hardcoded values, missing error handling
+4. **Edge Cases**: What breaks if user provides invalid input or uses features unexpectedly?
+5. **User Experience**: Are errors clear? Does the UI feel native to each platform?
 
-Show me the full report. Do not fix anything yet.
+Show me the complete audit report. Do not make changes yet.
 
-After the audit report, add: Fix all gaps found in the audit, smallest first. Commit after each fix.`,
+After audit: "Fix all gaps found in the audit, smallest first. Commit after each fix."`,
     },
   ];
+}
+
+function extractPlatforms(input) {
+  const platforms = [];
+  if (/android|kotlin|java(?:\s+app)?/i.test(input)) platforms.push('Android');
+  if (/ios|swift|iphone/i.test(input)) platforms.push('iOS');
+  if (/web|react|vue|angular|javascript|typescript/i.test(input)) platforms.push('Web');
+  if (/desktop|electron|tauri|windows|macos|linux/i.test(input)) platforms.push('Desktop');
+  if (/python|django|flask/i.test(input)) platforms.push('Python');
+  return platforms;
+}
+
+function extractFeatures(input) {
+  const features = [];
+  const featurePatterns = {
+    'Music playback': /music|play|audio|sound|track|song/i,
+    'Playlist management': /playlist|queue|library|collection/i,
+    'Search functionality': /search|find|query|filter/i,
+    'User authentication': /login|auth|user|account|sign/i,
+    'File management': /file|import|export|upload|download/i,
+    'Theme/Styling': /theme|dark|light|color|style/i,
+    'Settings': /setting|preference|option|configuration/i,
+    'Notifications': /notification|alert|notify|message/i,
+    'Analytics/Tracking': /analytic|track|stat|metric/i,
+  };
+
+  for (const [feature, regex] of Object.entries(featurePatterns)) {
+    if (regex.test(input)) {
+      features.push(feature);
+    }
+  }
+
+  return features.length > 0 ? features : ['Core application functionality'];
 }
 
 function generateFiles(taskType, input = '') {

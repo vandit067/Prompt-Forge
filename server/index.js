@@ -191,6 +191,17 @@ app.patch('/api/tasks/:id', (req, res) => {
   }
 });
 
+// DELETE /api/tasks/:id — delete a task
+app.delete('/api/tasks/:id', (req, res) => {
+  try {
+    const stmt = db.prepare('DELETE FROM tasks WHERE id = ?');
+    stmt.run(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/settings — get all user settings
 app.get('/api/settings', (_req, res) => {
   try {

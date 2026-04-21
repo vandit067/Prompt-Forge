@@ -132,6 +132,21 @@ export default function App() {
     handleGenerate(retryInput, task.projectPath);
   }
 
+  async function handleDeleteTask(taskId: string) {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    if (selectedTaskId === taskId) {
+      setSelectedTaskId(null);
+    }
+    try {
+      await api.deleteTask(taskId);
+    } catch (err) {
+      console.error('Failed to delete task:', err);
+      // Reload tasks on error
+      const allTasks = await api.getTasks();
+      setTasks(allTasks);
+    }
+  }
+
   function handleImport(importedTasks: Task[]) {
     setTasks(prev => {
       const existing = new Set(prev.map(t => t.id));
@@ -223,6 +238,7 @@ export default function App() {
         selectedTaskId={selectedTaskId}
         onNavigate={handleNavigate}
         onSelectTask={handleSelectTask}
+        onDeleteTask={handleDeleteTask}
         dbReady={dbReady}
       />
       {renderMain()}

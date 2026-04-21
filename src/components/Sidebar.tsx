@@ -12,6 +12,7 @@ interface Props {
   selectedTaskId: string | null;
   onNavigate: (screen: Screen) => void;
   onSelectTask: (taskId: string) => void;
+  onDeleteTask?: (taskId: string) => Promise<void>;
   dbReady?: boolean;
 }
 
@@ -38,7 +39,7 @@ const NAV_ITEMS = [
 
 const ALL_TYPES = Object.keys(TASK_TYPE_CONFIG) as TaskType[];
 
-export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSelectTask, dbReady = true }: Props) {
+export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSelectTask, onDeleteTask, dbReady = true }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'success' | 'error'>('all');
   const [typeFilter, setTypeFilter] = useState<TaskType | 'all'>('all');
@@ -359,6 +360,33 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
                   <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', marginLeft: 'auto' }}>
                     {formatRelativeTime(task.createdAt)}
                   </span>
+                  {onDeleteTask && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteTask(task.id);
+                      }}
+                      title="Delete task"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#52525b',
+                        cursor: 'pointer',
+                        padding: '0 2px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        fontSize: '12px',
+                      }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLButtonElement).style.color = '#ef4444';
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLButtonElement).style.color = '#52525b';
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </button>
             );

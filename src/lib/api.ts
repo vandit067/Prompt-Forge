@@ -25,6 +25,11 @@ export const api = {
       body: JSON.stringify({ status, errorNotes }),
     }),
 
+  deleteTask: (id: string) =>
+    request<{ ok: boolean }>(`/api/tasks/${id}`, {
+      method: 'DELETE',
+    }),
+
   getSettings: () =>
     request<Record<string, string>>('/api/settings'),
 

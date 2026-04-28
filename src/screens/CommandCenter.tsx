@@ -1036,9 +1036,10 @@ interface Props {
   isGenerating: boolean;
   selectedTask: Task | null;
   onClearSelection: () => void;
+  generateError?: string | null;
 }
 
-export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedTask, onClearSelection }: Props) {
+export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedTask, onClearSelection, generateError }: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
@@ -1283,6 +1284,23 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedT
         {/* Tabbed output panel — always visible */}
         {isGenerating ? (
           <GeneratingState />
+        ) : generateError ? (
+          <div
+            style={{
+              background: '#1a0a0a',
+              border: '1px solid #5f1d1d',
+              borderRadius: '12px',
+              padding: '20px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#fca5a5', fontFamily: '"JetBrains Mono", monospace' }}>
+              Generation failed
+            </span>
+            <span style={{ fontSize: '12px', color: '#a1a1aa', lineHeight: '1.5' }}>{generateError}</span>
+          </div>
         ) : selectedTask ? (
           /* ── Selected task: show real output ── */
           <div>

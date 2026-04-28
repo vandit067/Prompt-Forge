@@ -3,7 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { CommandCenter, TaskDetail } from './screens/CommandCenter';
 import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
-import { generateFakeTask } from './data/generators';
+import { classifyTask } from './data/generators';
 import { api } from './lib/api';
 import type { Task, Screen } from './types';
 
@@ -13,6 +13,7 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveTask, setLiveTask] = useState<Task | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [dbReady, setDbReady] = useState(false);
 
   useEffect(() => {
@@ -30,30 +31,38 @@ export default function App() {
     }
   }
 
-  // Clicking a sidebar task stays on command-center and loads output in tab panel
   function handleSelectTask(taskId: string) {
     setSelectedTaskId(taskId);
+    setGenerateError(null);
     setCurrentScreen('command-center');
   }
 
   function handleClearSelection() {
     setSelectedTaskId(null);
+    setGenerateError(null);
   }
 
   async function handleGenerate(input: string, projectPath?: string) {
     setIsGenerating(true);
     setLiveTask(null);
-    setSelectedTaskId(null); // clear any selected task when generating
+    setSelectedTaskId(null);
+    setGenerateError(null);
     setCurrentScreen('command-center');
 
-    await new Promise(res => setTimeout(res, 1600));
-
-    const newTask = generateFakeTask(input, projectPath);
-    setTasks(prev => [newTask, ...prev]);
-    setLiveTask(newTask);
-    setIsGenerating(false);
-
-    api.saveTask(newTask).catch(console.error);
+    try {
+      const taskType = classifyTask(input);
+      const newTask = await api.generate(input, taskType, projectPath);
+      setTasks(prev => [newTask, ...prev]);
+      setLiveTask(newTask);
+      setSelectedTaskId(newTask.id);
+      api.saveTask(newTask).catch(console.error);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setGenerateError(msg);
+      console.error('Generate failed:', err);
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   async function handleUpdateStatus(taskId: string, status: 'success' | 'error', notes?: string) {
@@ -119,6 +128,7 @@ export default function App() {
             isGenerating={isGenerating}
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
+            generateError={generateError}
           />
         );
 
@@ -131,6 +141,7 @@ export default function App() {
             isGenerating={isGenerating}
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
+            generateError={generateError}
           />
         );
     }

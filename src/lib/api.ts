@@ -1,4 +1,4 @@
-import type { Task } from '../types';
+import type { Task, TaskType } from '../types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -24,4 +24,12 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ status, errorNotes }),
     }),
+
+  generate: (input: string, taskType: TaskType, projectPath?: string) =>
+    request<Task>('/api/generate', {
+      method: 'POST',
+      body: JSON.stringify({ input, taskType, projectPath }),
+      // Claude with adaptive thinking can take up to ~60s
+      signal: AbortSignal.timeout(90_000),
+    } as RequestInit),
 };

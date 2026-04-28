@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
-import type { Task, OutputTab, ProjectMode } from '../types';
+import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
+import type { Task, OutputTab, ProjectMode, ScannedContext } from '../types';
 
 /* ─── Shared Output Panel ─── */
 interface OutputPanelProps {
@@ -23,9 +24,9 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
   return (
     <div
       style={{
-        background: '#0f0f12',
-        border: '1px solid #1c1c22',
-        borderRadius: '12px',
+        background: colors.bgCard,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.xl,
         overflow: 'hidden',
       }}
     >
@@ -33,9 +34,9 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
       <div
         style={{
           display: 'flex',
-          borderBottom: '1px solid #1c1c22',
-          background: '#0a0a0d',
-          padding: '0 4px',
+          borderBottom: `1px solid ${colors.border}`,
+          background: colors.bgMuted,
+          padding: `0 ${space.xs}`,
         }}
       >
         {TABS.map(tab => (
@@ -45,24 +46,24 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              padding: '11px 14px',
+              gap: space.sm,
+              padding: `11px ${space.md}`,
               border: 'none',
-              borderBottom: activeTab === tab.id ? '2px solid #3b82f6' : '2px solid transparent',
+              borderBottom: activeTab === tab.id ? `2px solid ${colors.blue}` : '2px solid transparent',
               background: 'transparent',
-              color: activeTab === tab.id ? '#fafafa' : '#71717a',
+              color: activeTab === tab.id ? colors.fg : colors.fgMuted,
               fontSize: '12px',
-              fontFamily: '"Inter", system-ui, sans-serif',
+              fontFamily: fonts.sans,
               fontWeight: activeTab === tab.id ? 500 : 400,
               cursor: 'pointer',
-              transition: 'color 0.12s',
+              transition: `color ${transitions.fast}`,
               marginBottom: '-1px',
             }}
             onMouseEnter={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = '#d4d4d8';
+              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
             }}
             onMouseLeave={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = '#71717a';
+              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgMuted;
             }}
           >
             {tab.icon}
@@ -70,11 +71,11 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
             <span
               style={{
                 padding: '1px 5px',
-                borderRadius: '4px',
-                background: activeTab === tab.id ? '#1e3a5f' : '#18181b',
-                color: activeTab === tab.id ? '#93c5fd' : '#52525b',
+                borderRadius: radius.sm,
+                background: activeTab === tab.id ? colors.blueBg : colors.bgInput,
+                color: activeTab === tab.id ? colors.blueLight : colors.fgDim,
                 fontSize: '10px',
-                fontFamily: '"JetBrains Mono", monospace',
+                fontFamily: fonts.mono,
               }}
             >
               {tab.count}
@@ -84,16 +85,16 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
       </div>
 
       {/* Tab content */}
-      <div style={{ padding: '16px' }}>
+      <div style={{ padding: space.lg }}>
         {activeTab === 'prompts' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
             {task.generatedPrompts.map((prompt) => (
               <div
                 key={prompt.id}
                 style={{
-                  background: '#0a0a0d',
-                  border: '1px solid #1c1c22',
-                  borderRadius: '8px',
+                  background: colors.bgMuted,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.lg,
                   overflow: 'hidden',
                 }}
               >
@@ -359,9 +360,233 @@ function GeneratingState() {
   );
 }
 
+/* ─── CLI Error States ─── */
+function CliNotInstalledBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div
+      style={{
+        background: '#4a2c2c',
+        border: '1px solid #8b4444',
+        borderRadius: '8px',
+        padding: '16px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: '12px',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: '#fca5a5', marginBottom: '6px' }}>
+          Claude Code CLI not found
+        </div>
+        <div style={{ fontSize: '12px', color: '#d4d4d8', lineHeight: '1.5', marginBottom: '8px' }}>
+          Install the CLI to generate real prompts:{' '}
+          <code style={{ background: '#2a1a1a', padding: '2px 6px', borderRadius: '4px' }}>
+            npm install -g @anthropic-ai/claude-code
+          </code>
+        </div>
+        <a
+          href="https://claude.ai/code"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: '12px',
+            color: '#93c5fd',
+            textDecoration: 'underline',
+            cursor: 'pointer',
+          }}
+        >
+          Learn more →
+        </a>
+      </div>
+      <button
+        onClick={onDismiss}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#a1a1aa',
+          cursor: 'pointer',
+          fontSize: '18px',
+          padding: '0 8px',
+          flexShrink: 0,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function GenerationErrorBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div
+      style={{
+        background: '#4a2c2c',
+        border: '1px solid #8b4444',
+        borderRadius: '8px',
+        padding: '16px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        justifyContent: 'space-between',
+      }}
+    >
+      <div>
+        <div style={{ fontSize: '13px', fontWeight: 600, color: '#fca5a5', marginBottom: '4px' }}>
+          Generation failed
+        </div>
+        <div style={{ fontSize: '12px', color: '#d4d4d8' }}>
+          An error occurred while generating the task. Please try again.
+        </div>
+      </div>
+      <button
+        onClick={onDismiss}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#a1a1aa',
+          cursor: 'pointer',
+          fontSize: '18px',
+          padding: '0 8px',
+          flexShrink: 0,
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 /* ─── Project Context Card ─── */
-function ProjectContextCard() {
+interface ProjectContextCardProps {
+  scannedContext: ScannedContext | null;
+  isScanning: boolean;
+  scanError: string | null;
+  projectPath: string;
+  onRescan: () => void;
+}
+
+function ProjectContextCard({ scannedContext, isScanning, scanError, projectPath, onRescan }: ProjectContextCardProps) {
   const [expanded, setExpanded] = useState(false);
+
+  // Scanning state
+  if (isScanning) {
+    return (
+      <div
+        style={{
+          background: '#0a0a0d',
+          border: '1px solid #1c1c22',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+        }}
+      >
+        <div
+          style={{
+            width: '12px',
+            height: '12px',
+            border: '1.5px solid #52525b',
+            borderTopColor: '#3b82f6',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+          }}
+        />
+        <span style={{ fontSize: '12px', color: '#a1a1aa', fontFamily: '"JetBrains Mono", monospace' }}>
+          Scanning {projectPath}…
+        </span>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  // Error state
+  if (scanError) {
+    return (
+      <div
+        style={{
+          background: '#4a2c2c',
+          border: '1px solid #8b4444',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#fca5a5', marginBottom: '4px' }}>
+            Scan failed
+          </div>
+          <div style={{ fontSize: '11px', color: '#d4d4d8', fontFamily: '"JetBrains Mono", monospace' }}>
+            {scanError}
+          </div>
+        </div>
+        <button
+          onClick={onRescan}
+          style={{
+            padding: '4px 10px',
+            background: 'transparent',
+            border: '1px solid #8b4444',
+            borderRadius: '4px',
+            color: '#fca5a5',
+            fontSize: '11px',
+            cursor: 'pointer',
+          }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // No scanned context
+  if (!scannedContext) {
+    return (
+      <div
+        style={{
+          background: '#0a0a0d',
+          border: '1px solid #1c1c22',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          color: '#71717a',
+          fontSize: '12px',
+          fontFamily: '"JetBrains Mono", monospace',
+        }}
+      >
+        Select a folder to scan for project context
+      </div>
+    );
+  }
+
+  // No companion files warning
+  if (!scannedContext.hasCompanionFiles) {
+    return (
+      <div
+        style={{
+          background: '#5f3e0a',
+          border: '1px solid #b8860b',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '10px',
+        }}
+      >
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: '#fcd34d', marginBottom: '4px' }}>
+            No SPEC.md or CLAUDE.md found
+          </div>
+          <div style={{ fontSize: '11px', color: '#d4d4d8' }}>
+            Output will be generic. Add SPEC.md or CLAUDE.md to provide project context.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Full context card
   return (
     <div
       style={{
@@ -390,36 +615,31 @@ function ProjectContextCard() {
           <span style={{ fontSize: '10px', fontFamily: '"JetBrains Mono", monospace', color: '#3b82f6', background: '#1e3a5f', padding: '1px 6px', borderRadius: '4px' }}>
             DETECTED
           </span>
-          <Badge label="Electron" />
-          <Badge label="React" />
-          <Badge label="TypeScript" />
+          {scannedContext.techStack.map(tech => <Badge key={tech} label={tech} />)}
         </div>
         {expanded ? <ChevronUp size={13} color="#71717a" /> : <ChevronDown size={13} color="#71717a" />}
       </button>
       {expanded && (
         <div style={{ padding: '0 14px 12px', borderTop: '1px solid #1c1c22' }}>
           <div style={{ paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <ContextRow label="Path" value="/Users/you/my-project" />
-            <ContextRow label="Stack" value="Electron + Vite + React 18 + TypeScript" />
-            <ContextRow label="SPEC.md" value="Found — purpose, 5 screens, build order extracted" />
-            <ContextRow label="CLAUDE.md" value="Found — 6 workflow rules, 3 cost rules, 2 safety rules" />
-            <ContextRow label="package.json" value="Found — 14 dependencies detected" />
+            <ContextRow label="Path" value={scannedContext.projectPath} />
+            {scannedContext.techStack.length > 0 && (
+              <ContextRow label="Stack" value={scannedContext.techStack.join(', ')} />
+            )}
+            {scannedContext.keyFiles.map(file => (
+              <ContextRow
+                key={file.filename}
+                label={file.filename}
+                value={file.found ? (file.excerpt ? `✓ ${file.excerpt}` : '✓ Found') : '—'}
+              />
+            ))}
+            {scannedContext.rules.length > 0 && (
+              <ContextRow
+                label="Rules"
+                value={`${scannedContext.rules.length} rules detected`}
+              />
+            )}
           </div>
-          <button
-            style={{
-              marginTop: '10px',
-              padding: '4px 10px',
-              background: 'transparent',
-              border: '1px solid #1c1c22',
-              borderRadius: '5px',
-              color: '#71717a',
-              fontSize: '11px',
-              fontFamily: '"JetBrains Mono", monospace',
-              cursor: 'pointer',
-            }}
-          >
-            Override context
-          </button>
         </div>
       )}
     </div>
@@ -1036,10 +1256,29 @@ interface Props {
   isGenerating: boolean;
   selectedTask: Task | null;
   onClearSelection: () => void;
+  onCancel?: () => void;
   generateError?: string | null;
+  scannedContext?: ScannedContext | null;
+  isScanning?: boolean;
+  scanError?: string | null;
+  onScanProject?: (path: string) => Promise<void>;
+  knownIssuesCount?: number;
 }
 
-export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedTask, onClearSelection, generateError }: Props) {
+export function CommandCenter({
+  onGenerate,
+  currentTask,
+  isGenerating,
+  selectedTask,
+  onClearSelection,
+  onCancel,
+  generateError,
+  scannedContext,
+  isScanning,
+  scanError,
+  onScanProject,
+  knownIssuesCount = 0,
+}: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
@@ -1112,14 +1351,14 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedT
         {/* Input area */}
         <div
           style={{
-            background: '#0f0f12',
-            border: '1px solid #1c1c22',
-            borderRadius: '12px',
+            background: colors.bgCard,
+            border: `1px solid ${colors.border}`,
+            borderRadius: radius.xl,
             overflow: 'hidden',
-            transition: 'border-color 0.15s',
+            transition: `border-color ${transitions.fast}`,
           }}
-          onFocusCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6'}
-          onBlurCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = '#1c1c22'}
+          onFocusCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = colors.blue}
+          onBlurCapture={e => (e.currentTarget as HTMLDivElement).style.borderColor = colors.border}
         >
           <textarea
             ref={textareaRef}
@@ -1156,15 +1395,15 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedT
             }}
           >
             {/* Project mode toggle */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
               <div
                 style={{
                   display: 'flex',
-                  background: '#18181b',
-                  border: '1px solid #1c1c22',
-                  borderRadius: '7px',
-                  padding: '2px',
-                  gap: '2px',
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.md,
+                  padding: space.xs,
+                  gap: space.xs,
                 }}
               >
                 {(['new', 'existing'] as const).map(mode => (
@@ -1172,16 +1411,28 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedT
                     key={mode}
                     onClick={() => setProjectMode(mode)}
                     style={{
-                      padding: '4px 10px',
-                      borderRadius: '5px',
-                      border: 'none',
-                      background: projectMode === mode ? '#1c1c22' : 'transparent',
-                      color: projectMode === mode ? '#fafafa' : '#71717a',
+                      padding: `${space.xs} ${space.md}`,
+                      borderRadius: radius.sm,
+                      border: projectMode === mode ? `1px solid ${colors.blue}` : '1px solid transparent',
+                      background: projectMode === mode ? colors.blueBg : colors.bgInput,
+                      color: projectMode === mode ? colors.blueLight : colors.fgHover,
                       fontSize: '11px',
-                      fontFamily: '"Inter", system-ui, sans-serif',
-                      fontWeight: projectMode === mode ? 500 : 400,
+                      fontFamily: fonts.sans,
+                      fontWeight: projectMode === mode ? 600 : 500,
                       cursor: 'pointer',
-                      transition: 'all 0.12s',
+                      transition: transitions.fast,
+                    }}
+                    onMouseEnter={e => {
+                      if (projectMode !== mode) {
+                        (e.currentTarget as HTMLButtonElement).style.background = colors.borderLight;
+                        (e.currentTarget as HTMLButtonElement).style.color = colors.fg;
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (projectMode !== mode) {
+                        (e.currentTarget as HTMLButtonElement).style.background = colors.bgInput;
+                        (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
+                      }
                     }}
                   >
                     {mode === 'new' ? 'New Project' : 'Existing Project'}
@@ -1218,7 +1469,10 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedT
                   <button
                     onClick={() => {
                       const p = window.prompt('Enter project path:', projectPath);
-                      if (p) setProjectPath(p);
+                      if (p) {
+                        setProjectPath(p);
+                        onScanProject?.(p);
+                      }
                     }}
                     style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '10px', cursor: 'pointer', padding: 0 }}
                   >
@@ -1228,58 +1482,113 @@ export function CommandCenter({ onGenerate, currentTask, isGenerating, selectedT
               )}
             </div>
 
-            {/* Submit */}
+            {/* Submit / Cancel */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
-                ⌘↵
-              </span>
-              <button
-                onClick={handleSubmit}
-                disabled={!input.trim() || isGenerating}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 16px',
-                  borderRadius: '7px',
-                  border: 'none',
-                  background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
-                  color: !input.trim() || isGenerating ? '#52525b' : '#000',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.12s',
-                  fontFamily: '"Inter", system-ui, sans-serif',
-                }}
-              >
-                {isGenerating ? (
-                  <>
-                    <div
-                      style={{
-                        width: '12px',
-                        height: '12px',
-                        border: '1.5px solid #52525b',
-                        borderTopColor: '#22c55e',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite',
-                      }}
-                    />
-                    Generating…
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                  </>
-                ) : (
-                  <>
-                    <Send size={13} />
-                    Generate
-                  </>
-                )}
-              </button>
+              {!isGenerating && (
+                <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+                  ⌘↵
+                </span>
+              )}
+              {isGenerating && onCancel ? (
+                <button
+                  onClick={onCancel}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: '#dc2626',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.12s',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                  }}
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  disabled={!input.trim() || isGenerating}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
+                    color: !input.trim() || isGenerating ? '#52525b' : '#000',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.12s',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                  }}
+                >
+                  {isGenerating ? (
+                    <>
+                      <div
+                        style={{
+                          width: '12px',
+                          height: '12px',
+                          border: '1.5px solid #52525b',
+                          borderTopColor: '#22c55e',
+                          borderRadius: '50%',
+                          animation: 'spin 0.8s linear infinite',
+                        }}
+                      />
+                      Generating…
+                      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={13} />
+                      Generate
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Project context (when existing mode) */}
-        {projectMode === 'existing' && <ProjectContextCard />}
+        {projectMode === 'existing' && (
+          <ProjectContextCard
+            scannedContext={scannedContext ?? null}
+            isScanning={isScanning ?? false}
+            scanError={scanError ?? null}
+            projectPath={projectPath}
+            onRescan={() => onScanProject?.(projectPath)}
+          />
+        )}
+
+        {/* Known Issues Indicator */}
+        {knownIssuesCount > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              background: '#2d1f4a',
+              border: '1px solid #5b3d8a',
+              borderRadius: '6px',
+              fontSize: '11px',
+              fontFamily: '"JetBrains Mono", monospace',
+              color: '#c4b5fd',
+            }}
+          >
+            <span>⟳</span>
+            Learning from {knownIssuesCount} past{' '}
+            {knownIssuesCount === 1 ? 'issue' : 'issues'}
+          </div>
+        )}
 
         {/* Tabbed output panel — always visible */}
         {isGenerating ? (

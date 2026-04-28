@@ -1,6 +1,7 @@
 import type { Task, TaskType } from '../types';
 import { TASK_TYPE_CONFIG } from '../types';
 import { TrendingUp, CheckCircle2, XCircle, Clock, BarChart3 } from 'lucide-react';
+import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 
 interface Props {
   tasks: Task[];
@@ -22,17 +23,17 @@ function StatCard({
   return (
     <div
       style={{
-        background: '#0f0f12',
-        border: '1px solid #1c1c22',
-        borderRadius: '12px',
-        padding: '20px',
+        background: colors.bgCard,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.xl,
+        padding: space.lg,
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
+        gap: space.xs,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: '12px', color: '#71717a', fontFamily: '"Inter", system-ui, sans-serif' }}>{label}</span>
+        <span style={{ fontSize: '12px', color: colors.fgMuted, fontFamily: fonts.sans }}>{label}</span>
         <div
           style={{
             width: '30px',
@@ -47,10 +48,10 @@ function StatCard({
           {icon}
         </div>
       </div>
-      <div style={{ fontSize: '28px', fontWeight: 700, color: '#fafafa', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '-0.02em' }}>
+      <div style={{ fontSize: '28px', fontWeight: 700, color: colors.fg, fontFamily: fonts.mono, letterSpacing: '-0.02em' }}>
         {value}
       </div>
-      {sub && <div style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: '11px', color: colors.fgDim, fontFamily: fonts.mono }}>{sub}</div>}
     </div>
   );
 }
@@ -59,15 +60,15 @@ function TypeBar({ type, count, maxCount }: { type: TaskType; count: number; max
   const cfg = TASK_TYPE_CONFIG[type];
   const pct = maxCount === 0 ? 0 : Math.round((count / maxCount) * 100);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
       <div style={{ width: '110px', flexShrink: 0 }}>
         <span
           style={{
             display: 'inline-flex',
             padding: '2px 7px',
-            borderRadius: '5px',
+            borderRadius: radius.sm,
             fontSize: '10px',
-            fontFamily: '"JetBrains Mono", monospace',
+            fontFamily: fonts.mono,
             color: cfg.color,
             background: cfg.bg,
           }}
@@ -75,20 +76,102 @@ function TypeBar({ type, count, maxCount }: { type: TaskType; count: number; max
           {cfg.label}
         </span>
       </div>
-      <div style={{ flex: 1, height: '8px', background: '#18181b', borderRadius: '4px', overflow: 'hidden' }}>
+      <div style={{ flex: 1, height: '8px', background: colors.bgInput, borderRadius: radius.sm, overflow: 'hidden' }}>
         <div
           style={{
             height: '100%',
             width: `${pct}%`,
             background: cfg.color,
-            borderRadius: '4px',
+            borderRadius: radius.sm,
             transition: 'width 0.6s ease',
           }}
         />
       </div>
-      <span style={{ width: '28px', textAlign: 'right', fontSize: '11px', color: '#71717a', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
+      <span style={{ width: '28px', textAlign: 'right', fontSize: '11px', color: colors.fgMuted, fontFamily: fonts.mono, flexShrink: 0 }}>
         {count}
       </span>
+    </div>
+  );
+}
+
+function WeeklyTrendChart({ data }: { data: { week: string; rate: number; successes: number; total: number }[] }) {
+  if (data.length === 0) return <p style={{ color: '#52525b', fontSize: '12px' }}>No task history yet.</p>;
+
+  const maxRate = 100;
+  const chartHeight = 120;
+  const chartWidth = data.length > 0 ? 100 / data.length : 100;
+  const points = data.map((d, i) => {
+    const x = (i + 0.5) * chartWidth;
+    const y = chartHeight - (d.rate / maxRate) * chartHeight;
+    return { x, y, ...d };
+  });
+
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <svg
+        viewBox={`0 0 100 ${chartHeight + 20}`}
+        style={{ width: '100%', height: '140px' }}
+        preserveAspectRatio="none"
+      >
+        {/* Grid lines */}
+        {[0, 25, 50, 75, 100].map(v => (
+          <line
+            key={`grid-${v}`}
+            x1="0"
+            y1={chartHeight - (v / 100) * chartHeight}
+            x2="100"
+            y2={chartHeight - (v / 100) * chartHeight}
+            stroke={colors.bgInput}
+            strokeWidth="0.5"
+          />
+        ))}
+
+        {/* Area fill */}
+        <path
+          d={`${pathD} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`}
+          fill={`${colors.blue}22`}
+        />
+
+        {/* Line */}
+        <path d={pathD} stroke={colors.blue} strokeWidth="1.5" fill="none" />
+
+        {/* Points */}
+        {points.map((p, i) => (
+          <circle key={`point-${i}`} cx={p.x} cy={p.y} r="1.5" fill={colors.blue} />
+        ))}
+
+        {/* Y-axis labels */}
+        {[0, 25, 50, 75, 100].map(v => (
+          <text
+            key={`label-${v}`}
+            x="2"
+            y={chartHeight - (v / 100) * chartHeight + 3}
+            fontSize="8"
+            fill={colors.fgDim}
+          >
+            {v}%
+          </text>
+        ))}
+      </svg>
+
+      {/* Week labels and values */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: space.xs }}>
+        {data.map(d => (
+          <div key={d.week} style={{ flex: 1, textAlign: 'center' }}>
+            <div style={{ fontSize: '9px', color: colors.fgDim, fontFamily: fonts.mono }}>
+              {d.week}
+            </div>
+            <div style={{ fontSize: '10px', color: colors.success, fontFamily: fonts.mono, fontWeight: 600 }}>
+              {d.rate}%
+            </div>
+            <div style={{ fontSize: '8px', color: colors.fgMuted, fontFamily: fonts.mono }}>
+              {d.successes}/{d.total}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -116,8 +199,52 @@ export function Analytics({ tasks }: Props) {
     .map(t => ({ type: t.taskType, notes: t.errorNotes!, date: t.createdAt }))
     .slice(0, 5);
 
-  // Success rate over time (last 7 tasks as a mini trend)
-  const recent = [...tasks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 7).reverse();
+  // Weekly success rate trend
+  const weeklyData = tasks.length === 0 ? [] : (() => {
+    const now = new Date();
+    const weeks: { week: string; successes: number; total: number; rate: number }[] = [];
+
+    // Calculate past 8 weeks
+    for (let i = 7; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - (i * 7));
+      weekStart.setHours(0, 0, 0, 0);
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+
+      const weekTasks = tasks.filter(t => {
+        const date = new Date(t.createdAt);
+        return date >= weekStart && date < weekEnd;
+      });
+
+      if (weekTasks.length > 0) {
+        const weekSuccesses = weekTasks.filter(t => t.status === 'success').length;
+        weeks.push({
+          week: `Week ${7 - i}`,
+          successes: weekSuccesses,
+          total: weekTasks.length,
+          rate: Math.round((weekSuccesses / weekTasks.length) * 100),
+        });
+      }
+    }
+
+    return weeks.length > 0 ? weeks : [];
+  })();
+
+  // Most used project paths
+  const pathCounts = tasks
+    .filter(t => t.projectPath)
+    .reduce<Record<string, number>>((acc, t) => {
+      if (t.projectPath) {
+        acc[t.projectPath] = (acc[t.projectPath] ?? 0) + 1;
+      }
+      return acc;
+    }, {});
+  const topPaths = Object.entries(pathCounts)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5)
+    .map(([path, count]) => ({ path, count }));
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
@@ -195,7 +322,7 @@ export function Analytics({ tasks }: Props) {
             )}
           </div>
 
-          {/* Recent trend */}
+          {/* Weekly improvement trend */}
           <div
             style={{
               background: '#0f0f12',
@@ -205,46 +332,79 @@ export function Analytics({ tasks }: Props) {
             }}
           >
             <h2 style={{ margin: '0 0 16px', fontSize: '13px', fontWeight: 600, color: '#fafafa' }}>
-              Recent Task Trend
+              Success Rate Trend
             </h2>
-            {recent.length === 0 ? (
-              <p style={{ color: '#52525b', fontSize: '12px' }}>No tasks yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {recent.map(task => (
-                  <div
-                    key={task.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      padding: '8px 10px',
-                      background: '#0a0a0d',
-                      borderRadius: '7px',
-                      border: '1px solid #1c1c22',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: task.status === 'success' ? '#22c55e' : task.status === 'error' ? '#ef4444' : '#71717a',
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span style={{ flex: 1, fontSize: '11px', color: '#a1a1aa', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {task.input.slice(0, 45)}{task.input.length > 45 ? '…' : ''}
-                    </span>
-                    <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', flexShrink: 0 }}>
-                      {TASK_TYPE_CONFIG[task.taskType].label}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            <WeeklyTrendChart data={weeklyData} />
           </div>
         </div>
+
+        {/* Most used project paths */}
+        {topPaths.length > 0 && (
+          <div
+            style={{
+              background: '#0f0f12',
+              border: '1px solid #1c1c22',
+              borderRadius: '12px',
+              padding: '20px',
+            }}
+          >
+            <h2 style={{ margin: '0 0 16px', fontSize: '13px', fontWeight: 600, color: '#fafafa' }}>
+              Most Used Project Paths
+            </h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {topPaths.map((item, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    background: '#0a0a0d',
+                    borderRadius: '7px',
+                    border: '1px solid #1c1c22',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '6px',
+                      background: '#3b82f622',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      fontSize: '10px',
+                      color: '#3b82f6',
+                      fontWeight: 600,
+                      fontFamily: '"JetBrains Mono", monospace',
+                    }}
+                  >
+                    {item.count}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: '#fafafa',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontFamily: '"JetBrains Mono", monospace',
+                      }}
+                    >
+                      {item.path}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#52525b', flexShrink: 0 }}>
+                    {item.count} task{item.count !== 1 ? 's' : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Common failures */}
         <div

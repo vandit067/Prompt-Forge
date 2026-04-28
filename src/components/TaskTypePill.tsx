@@ -1,5 +1,6 @@
 import type { TaskType } from '../types';
 import { TASK_TYPE_CONFIG } from '../types';
+import { fonts, radius } from '../lib/designSystem';
 
 interface Props {
   type: TaskType;
@@ -17,9 +18,9 @@ export function TaskTypePill({ type, size = 'sm' }: Props) {
         display: 'inline-flex',
         alignItems: 'center',
         padding,
-        borderRadius: '6px',
+        borderRadius: radius.md,
         fontSize,
-        fontFamily: '"JetBrains Mono", monospace',
+        fontFamily: fonts.mono,
         fontWeight: 600,
         letterSpacing: '0.03em',
         color: cfg.color,

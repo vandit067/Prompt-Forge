@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import { stmts } from './db.js';
+import { scanProject } from './project-scanner.js';
 
 const app = express();
 app.use(cors());
@@ -171,14 +172,41 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+// Classify error type based on error notes content
+function classifyErrorType(notes) {
+  if (!notes) return 'unknown';
+  const lower = notes.toLowerCase();
+  if (lower.includes('syntax') || lower.includes('parse')) return 'syntax_error';
+  if (lower.includes('type') || lower.includes('typing')) return 'type_error';
+  if (lower.includes('import') || lower.includes('module not found')) return 'import_error';
+  if (lower.includes('runtime') || lower.includes('not defined')) return 'runtime_error';
+  if (lower.includes('timeout') || lower.includes('too long')) return 'timeout';
+  if (lower.includes('memory') || lower.includes('heap')) return 'memory_error';
+  if (lower.includes('network') || lower.includes('connection')) return 'network_error';
+  if (lower.includes('permission') || lower.includes('access denied')) return 'permission_error';
+  if (lower.includes('database') || lower.includes('query')) return 'database_error';
+  if (lower.includes('logic') || lower.includes('incorrect')) return 'logic_error';
+  if (lower.includes('missing') || lower.includes('not found')) return 'missing_requirement';
+  return 'user_reported';
+}
+
 function rowToTask(row) {
+  let projectContext;
+  if (row.project_context) {
+    try {
+      projectContext = JSON.parse(row.project_context);
+    } catch {
+      projectContext = undefined;
+    }
+  }
+
   return {
     id:               row.id,
     title:            row.title,
     input:            row.input,
     taskType:         row.task_type,
     projectPath:      row.project_path ?? undefined,
-    projectContext:   row.project_context ?? undefined,
+    projectContext:   projectContext,
     status:           row.status,
     errorNotes:       row.error_notes ?? undefined,
     generatedPrompts: JSON.parse(row.generated_prompts),
@@ -197,6 +225,146 @@ app.get('/api/tasks', (_req, res) => {
     res.json(rows.map(rowToTask));
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/failures/count — get failure count for a task type
+app.get('/api/failures/count', (req, res) => {
+  const { taskType } = req.query;
+  if (!taskType) {
+    return res.status(400).json({ error: 'taskType required' });
+  }
+  try {
+    const rows = stmts.getFailuresByTaskType.all(taskType);
+    res.json({ count: rows.length, notes: rows.map(r => r.notes) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/scan-project — scan a project folder for context
+app.post('/api/scan-project', async (req, res) => {
+  const { path: folderPath } = req.body;
+
+  if (!folderPath) {
+    return res.status(400).json({ error: 'path required' });
+  }
+
+  try {
+    const context = await scanProject(folderPath);
+    res.json(context);
+  } catch (err) {
+    if (err.code === 'NOT_FOUND') {
+      return res.status(404).json({ error: 'Folder not found' });
+    }
+    if (err.code === 'NOT_DIRECTORY') {
+      return res.status(400).json({ error: 'Path is not a directory' });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/generate — generate a structured task via Anthropic API
+app.post('/api/generate', async (req, res) => {
+  if (!anthropic) {
+    return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not set. Add it to your .env file.' });
+  }
+
+  const { input, projectPath, projectContext, taskType } = req.body;
+
+  if (!input?.trim()) {
+    return res.status(400).json({ error: 'input required' });
+  }
+
+  // Build known issues block from past failures
+  let knownIssues = '';
+  if (taskType) {
+    try {
+      const failures = stmts.getFailuresByTaskType.all(taskType);
+      if (failures.length > 0) {
+        const notes = failures.map(f => `- ${f.notes}`).join('\n');
+        knownIssues = `\n\nKNOWN ISSUES TO AVOID FOR ${taskType}:\n${notes}\n\nDo not reproduce these patterns in your output.`;
+      }
+    } catch {
+      // DB error reading failures — non-blocking
+    }
+  }
+
+  const userMessage = [
+    `Task type: ${taskType || 'NEW_FEATURE'}`,
+    `Request: ${input.trim()}`,
+    projectPath ? `Project path: ${projectPath}` : null,
+    projectContext?.promptBlock ? `Project context:\n${projectContext.promptBlock}` : null,
+    knownIssues || null,
+  ].filter(Boolean).join('\n');
+
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-7',
+      max_tokens: 4096,
+      thinking: { type: 'adaptive' },
+      system: [
+        {
+          type: 'text',
+          text: SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [{ role: 'user', content: userMessage }],
+    });
+
+    // Adaptive thinking may prepend thinking blocks — find the text block
+    const textBlock = response.content.find(b => b.type === 'text');
+    if (!textBlock) {
+      return res.status(500).json({ error: 'No text content in response' });
+    }
+
+    let parsed;
+    try {
+      const raw = textBlock.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+      parsed = JSON.parse(raw);
+    } catch {
+      console.error('Non-JSON response (first 500 chars):', textBlock.text.slice(0, 500));
+      return res.status(500).json({ error: 'Invalid JSON response from model' });
+    }
+
+    const now = new Date().toISOString();
+    const task = {
+      id:         `task-${uid()}`,
+      title:      (parsed.title || input.trim().slice(0, 58)).replace(/[.!?]+$/, ''),
+      input:      input.trim(),
+      taskType:   taskType || 'NEW_FEATURE',
+      projectPath: projectPath ?? undefined,
+      status:     'pending',
+      generatedPrompts: (parsed.generatedPrompts || []).map(p => ({ id: uid(), sessionLabel: p.sessionLabel, content: p.content })),
+      generatedFiles:   (parsed.generatedFiles || []).map(f => ({ id: uid(), filename: f.filename, content: f.content })),
+      generatedPlan:    (parsed.generatedPlan || []).map(s => ({ session: s.session, title: s.title, description: s.description, estimatedTime: s.estimatedTime })),
+      generatedChecklist: parsed.generatedChecklist || [],
+      createdAt:  now,
+      updatedAt:  now,
+    };
+
+    // Persist to DB
+    stmts.insertTask.run({
+      id:                  task.id,
+      title:               task.title,
+      input:               task.input,
+      task_type:           task.taskType,
+      project_path:        task.projectPath ?? null,
+      project_context:     projectContext ? JSON.stringify(projectContext) : null,
+      status:              task.status,
+      generated_prompts:   JSON.stringify(task.generatedPrompts),
+      generated_files:     JSON.stringify(task.generatedFiles),
+      generated_plan:      JSON.stringify(task.generatedPlan),
+      generated_checklist: JSON.stringify(task.generatedChecklist),
+      created_at:          task.createdAt,
+      updated_at:          task.updatedAt,
+    });
+
+    res.json(task);
+  } catch (err) {
+    console.error('Anthropic API error:', err.message);
+    res.status(500).json({ error: err.message || 'Generation failed' });
   }
 });
 
@@ -236,7 +404,8 @@ app.patch('/api/tasks/:id', (req, res) => {
       updated_at:  new Date().toISOString(),
     });
     if (status === 'error' && errorNotes) {
-      stmts.insertFailure.run(req.params.id, 'user_reported', errorNotes);
+      const errorType = classifyErrorType(errorNotes);
+      stmts.insertFailure.run(req.params.id, errorType, errorNotes);
     }
     res.json({ ok: true });
   } catch (err) {
@@ -244,73 +413,29 @@ app.patch('/api/tasks/:id', (req, res) => {
   }
 });
 
-// POST /api/generate — generate a structured task via Claude
-app.post('/api/generate', async (req, res) => {
-  if (!anthropic) {
-    return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not set. Add it to your .env file.' });
-  }
-
-  const { input, taskType, projectPath } = req.body;
-  if (!input || typeof input !== 'string' || input.trim().length === 0) {
-    return res.status(400).json({ error: 'input is required' });
-  }
-
-  const userMessage = [
-    `Task type: ${taskType}`,
-    `Request: ${input.trim()}`,
-    projectPath ? `Project path: ${projectPath}` : null,
-  ].filter(Boolean).join('\n');
-
+// GET /api/settings — get all user settings
+app.get('/api/settings', (_req, res) => {
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 4096,
-      thinking: { type: 'adaptive' },
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [{ role: 'user', content: userMessage }],
-    });
-
-    // Adaptive thinking may prepend thinking blocks — find the text block
-    const textBlock = response.content.find(b => b.type === 'text');
-    if (!textBlock) {
-      return res.status(500).json({ error: 'No text content in Claude response' });
-    }
-
-    let parsed;
-    try {
-      // Strip any accidental markdown fences before parsing
-      const raw = textBlock.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-      parsed = JSON.parse(raw);
-    } catch {
-      console.error('Claude returned non-JSON:', textBlock.text.slice(0, 500));
-      return res.status(500).json({ error: 'Claude returned invalid JSON', raw: textBlock.text.slice(0, 500) });
-    }
-
-    const now = new Date().toISOString();
-    const task = {
-      id:         `task-${uid()}`,
-      title:      (parsed.title || input.slice(0, 58)).trim(),
-      input:      input.trim(),
-      taskType,
-      projectPath: projectPath ?? undefined,
-      status:     'pending',
-      generatedPrompts: (parsed.generatedPrompts || []).map(p => ({ id: uid(), sessionLabel: p.sessionLabel, content: p.content })),
-      generatedFiles:   (parsed.generatedFiles || []).map(f => ({ id: uid(), filename: f.filename, content: f.content })),
-      generatedPlan:    (parsed.generatedPlan || []).map(s => ({ session: s.session, title: s.title, description: s.description, estimatedTime: s.estimatedTime })),
-      generatedChecklist: parsed.generatedChecklist || [],
-      createdAt:  now,
-      updatedAt:  now,
-    };
-
-    res.json(task);
+    const rows = stmts.getAllSettings.all();
+    const settings = rows.reduce((acc, row) => {
+      acc[row.key] = row.value;
+      return acc;
+    }, {});
+    res.json(settings);
   } catch (err) {
-    console.error('Claude API error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/settings — save user settings
+app.post('/api/settings', (req, res) => {
+  const settings = req.body;
+  try {
+    for (const [key, value] of Object.entries(settings)) {
+      stmts.setSetting.run(key, String(value));
+    }
+    res.json({ ok: true });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });

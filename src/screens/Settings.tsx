@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Terminal, Download, Upload, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
+import { api } from '../lib/api';
 import type { Task } from '../types';
 
 interface Props {
@@ -12,14 +14,14 @@ function SectionCard({ title, subtitle, children }: { title: string; subtitle?: 
   return (
     <div
       style={{
-        background: '#0f0f12',
-        border: '1px solid #1c1c22',
-        borderRadius: '12px',
-        padding: '20px',
+        background: colors.bgCard,
+        border: `1px solid ${colors.border}`,
+        borderRadius: radius.xl,
+        padding: space.lg,
       }}
     >
-      <h2 style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 600, color: '#fafafa' }}>{title}</h2>
-      {subtitle && <p style={{ margin: '0 0 16px', fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>{subtitle}</p>}
+      <h2 style={{ margin: '0 0 4px', fontSize: '13px', fontWeight: 600, color: colors.fg }}>{title}</h2>
+      {subtitle && <p style={{ margin: '0 0 16px', fontSize: '11px', color: colors.fgDim, fontFamily: fonts.mono }}>{subtitle}</p>}
       {!subtitle && <div style={{ marginBottom: '16px' }} />}
       {children}
     </div>
@@ -159,10 +161,41 @@ export function Settings({ tasks, onImport, onResetPatterns }: Props) {
     smallCommits: true,
   });
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Load settings from DB on mount
+    api.getSettings()
+      .then(settings => {
+        if (settings.cliPath) setCliPath(settings.cliPath);
+        if (settings.defaultPath) setDefaultPath(settings.defaultPath);
+        if (settings.constraints) {
+          try {
+            setConstraints(JSON.parse(settings.constraints));
+          } catch {
+            // Keep defaults if parse fails
+          }
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   function handleSave() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const settingsToSave = {
+      cliPath,
+      defaultPath,
+      constraints: JSON.stringify(constraints),
+    };
+    api.saveSettings(settingsToSave)
+      .then(() => {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      })
+      .catch(err => {
+        console.error('Failed to save settings:', err);
+        alert('Failed to save settings');
+      });
   }
 
   function handleExport() {

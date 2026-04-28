@@ -16,6 +16,22 @@ export type Screen = 'command-center' | 'analytics' | 'settings' | 'task-detail'
 
 export type ProjectMode = 'new' | 'existing';
 
+export interface ScannedFile {
+  filename: string;
+  found: boolean;
+  excerpt?: string;
+}
+
+export interface ScannedContext {
+  projectPath: string;
+  techStack: string[];
+  keyFiles: ScannedFile[];
+  rules: string[];
+  specPurpose?: string;
+  hasCompanionFiles: boolean;
+  promptBlock: string;
+}
+
 export type OutputTab = 'prompts' | 'files' | 'plan' | 'checklist';
 
 export interface GeneratedPrompt {

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Terminal, BarChart3, Settings, Search, X } from 'lucide-react';
+import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import { TaskTypePill } from './TaskTypePill';
 import { StatusIcon } from './StatusIcon';
 import type { Task, Screen, TaskType } from '../types';
@@ -63,21 +64,21 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
         width: '264px',
         minWidth: '264px',
         height: '100vh',
-        background: '#0a0a0d',
-        borderRight: '1px solid #1c1c22',
+        background: colors.bgMuted,
+        borderRight: `1px solid ${colors.border}`,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
       }}
     >
       {/* Logo */}
-      <div style={{ padding: '18px 16px 14px', borderBottom: '1px solid #1c1c22', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+      <div style={{ padding: '18px 16px 14px', borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: space.md }}>
           <div
             style={{
               width: '30px',
               height: '30px',
-              borderRadius: '8px',
+              borderRadius: radius.md,
               background: 'linear-gradient(135deg, #3b82f6, #22c55e)',
               display: 'flex',
               alignItems: 'center',
@@ -88,10 +89,10 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
             <Terminal size={15} color="#fff" />
           </div>
           <div>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: '#fafafa', letterSpacing: '-0.01em' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: colors.fg, letterSpacing: '-0.01em' }}>
               Prompt Forge
             </div>
-            <div style={{ fontSize: '10px', color: '#71717a', fontFamily: '"JetBrains Mono", monospace' }}>
+            <div style={{ fontSize: '10px', color: colors.fgMuted, fontFamily: fonts.mono }}>
               v0.1.0 — prototype
             </div>
           </div>
@@ -99,7 +100,7 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
       </div>
 
       {/* Navigation */}
-      <nav style={{ padding: '8px 8px', borderBottom: '1px solid #1c1c22', flexShrink: 0 }}>
+      <nav style={{ padding: space.sm, borderBottom: `1px solid ${colors.border}`, flexShrink: 0 }}>
         {NAV_ITEMS.map(({ screen, icon: Icon, label }) => {
           const active = currentScreen === screen || (screen === 'command-center' && currentScreen === 'task-detail');
           return (

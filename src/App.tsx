@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { CommandCenter, TaskDetail } from './screens/CommandCenter';
 import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
-import { classifyTask } from './data/generators';
+import { colors } from './lib/designSystem';
 import { api } from './lib/api';
-import type { Task, Screen } from './types';
+import { scanProject, getFailureCount } from './services/claude-cli';
+import { classifyTask } from './data/generators';
+import type { Task, Screen, ScannedContext } from './types';
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -15,6 +17,11 @@ export default function App() {
   const [liveTask, setLiveTask] = useState<Task | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [dbReady, setDbReady] = useState(false);
+  const [scannedContext, setScannedContext] = useState<ScannedContext | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [knownIssuesCount, setKnownIssuesCount] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     api.getTasks()
@@ -31,6 +38,7 @@ export default function App() {
     }
   }
 
+  // Clicking a sidebar task stays on command-center and shows output in tab panel
   function handleSelectTask(taskId: string) {
     setSelectedTaskId(taskId);
     setGenerateError(null);
@@ -42,7 +50,15 @@ export default function App() {
     setGenerateError(null);
   }
 
+  function handleCancel() {
+    abortRef.current?.abort();
+    setIsGenerating(false);
+  }
+
   async function handleGenerate(input: string, projectPath?: string) {
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setIsGenerating(true);
     setLiveTask(null);
     setSelectedTaskId(null);
@@ -51,17 +67,39 @@ export default function App() {
 
     try {
       const taskType = classifyTask(input);
+      const { count } = await getFailureCount(taskType);
+      setKnownIssuesCount(count);
+
       const newTask = await api.generate(input, taskType, projectPath);
       setTasks(prev => [newTask, ...prev]);
       setLiveTask(newTask);
       setSelectedTaskId(newTask.id);
-      api.saveTask(newTask).catch(console.error);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setGenerateError(msg);
-      console.error('Generate failed:', err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Silent cancel
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        setGenerateError(msg);
+        console.error('Generation failed:', err);
+      }
     } finally {
       setIsGenerating(false);
+      abortRef.current = null;
+    }
+  }
+
+  async function handleScanProject(path: string) {
+    setIsScanning(true);
+    setScanError(null);
+    setScannedContext(null);
+
+    try {
+      const ctx = await scanProject(path);
+      setScannedContext(ctx);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Scan failed');
+    } finally {
+      setIsScanning(false);
     }
   }
 
@@ -128,7 +166,12 @@ export default function App() {
             isGenerating={isGenerating}
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
+            onCancel={handleCancel}
             generateError={generateError}
+            scannedContext={scannedContext}
+            isScanning={isScanning}
+            scanError={scanError}
+            onScanProject={handleScanProject}
           />
         );
 
@@ -141,7 +184,13 @@ export default function App() {
             isGenerating={isGenerating}
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
+            onCancel={handleCancel}
             generateError={generateError}
+            scannedContext={scannedContext}
+            isScanning={isScanning}
+            scanError={scanError}
+            onScanProject={handleScanProject}
+            knownIssuesCount={knownIssuesCount}
           />
         );
     }
@@ -152,7 +201,7 @@ export default function App() {
       style={{
         display: 'flex',
         height: '100vh',
-        background: '#09090b',
+        background: colors.bg,
         overflow: 'hidden',
         fontFamily: '"Inter", system-ui, -apple-system, sans-serif',
       }}

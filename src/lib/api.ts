@@ -25,11 +25,19 @@ export const api = {
       body: JSON.stringify({ status, errorNotes }),
     }),
 
+  getSettings: () =>
+    request<Record<string, string>>('/api/settings'),
+
+  saveSettings: (settings: Record<string, string>) =>
+    request<{ ok: boolean }>('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    }),
+
   generate: (input: string, taskType: TaskType, projectPath?: string) =>
     request<Task>('/api/generate', {
       method: 'POST',
       body: JSON.stringify({ input, taskType, projectPath }),
-      // Claude with adaptive thinking can take up to ~60s
       signal: AbortSignal.timeout(90_000),
     } as RequestInit),
 };

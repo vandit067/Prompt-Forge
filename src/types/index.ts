@@ -25,6 +25,9 @@ export interface ScannedFile {
 export interface ScannedContext {
   projectPath: string;
   techStack: string[];
+  packageMgr?: string | null;
+  scripts?: Record<string, string>;
+  hooks?: string[];
   keyFiles: ScannedFile[];
   rules: string[];
   specPurpose?: string;

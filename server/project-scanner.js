@@ -1,53 +1,51 @@
-import { readFileSync, readdirSync, statSync } from 'fs';
-import { join, relative } from 'path';
+import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
+import { join } from 'path';
 
 export async function scanProject(folderPath) {
-  // Validate path exists
   let stats;
   try {
     stats = statSync(folderPath);
-    if (!stats.isDirectory()) {
-      throw { code: 'NOT_DIRECTORY', message: 'Path is not a directory' };
-    }
+    if (!stats.isDirectory()) throw { code: 'NOT_DIRECTORY', message: 'Path is not a directory' };
   } catch (err) {
     if (err.code === 'ENOENT') throw { code: 'NOT_FOUND', message: 'Folder not found' };
     throw err;
   }
 
-  // Read companion files
-  const spec = readSafe(join(folderPath, 'SPEC.md'));
-  const claude = readSafe(join(folderPath, 'CLAUDE.md'));
+  const spec    = readSafe(join(folderPath, 'SPEC.md'));
+  const claude  = readSafe(join(folderPath, 'CLAUDE.md'));
   const prompts = readSafe(join(folderPath, 'PROMPTS.md'));
-  const readme = readSafe(join(folderPath, 'README.md'));
+  const readme  = readSafe(join(folderPath, 'README.md'));
 
-  // Detect tech stack from package.json or requirements.txt
-  const pkg = readJsonSafe(join(folderPath, 'package.json'));
+  const pkg          = readJsonSafe(join(folderPath, 'package.json'));
   const requirements = readSafe(join(folderPath, 'requirements.txt'));
-  const techStack = detectTechStack(pkg, requirements);
 
-  // Extract text from SPEC.md and CLAUDE.md
-  const specPurpose = spec ? extractSpecPurpose(spec) : undefined;
-  const rules = claude ? extractRules(claude) : [];
+  const techStack    = detectTechStack(pkg, requirements);
+  const packageMgr   = detectPackageManager(folderPath, pkg);
+  const scripts      = extractScripts(pkg);
+  const hooks        = detectHooks(folderPath);
 
-  // Key files to track
+  const specPurpose  = spec   ? extractSpecPurpose(spec)   : undefined;
+  // Keep ALL rules — the system prompt needs the full list
+  const rules        = claude ? extractRules(claude)        : [];
+
   const keyFiles = [
-    { filename: 'SPEC.md', found: !!spec },
-    { filename: 'CLAUDE.md', found: !!claude },
-    { filename: 'PROMPTS.md', found: !!prompts },
-    { filename: 'README.md', found: !!readme },
-    { filename: 'package.json', found: !!pkg },
-    { filename: 'requirements.txt', found: !!requirements },
+    { filename: 'SPEC.md',           found: !!spec },
+    { filename: 'CLAUDE.md',         found: !!claude },
+    { filename: 'PROMPTS.md',        found: !!prompts },
+    { filename: 'README.md',         found: !!readme },
+    { filename: 'package.json',      found: !!pkg },
+    { filename: 'requirements.txt',  found: !!requirements },
   ];
 
   const hasCompanionFiles = !!spec || !!claude;
-
-  // Read folder structure (2 levels)
   const tree = twoLevelTree(folderPath);
 
-  // Build the prompt block
   const promptBlock = buildPromptBlock({
     projectPath: folderPath,
     techStack,
+    packageMgr,
+    scripts,
+    hooks,
     keyFiles,
     rules,
     specPurpose,
@@ -58,6 +56,9 @@ export async function scanProject(folderPath) {
   return {
     projectPath: folderPath,
     techStack,
+    packageMgr,
+    scripts,
+    hooks,
     keyFiles,
     rules,
     specPurpose,
@@ -67,159 +68,160 @@ export async function scanProject(folderPath) {
 }
 
 function readSafe(filePath) {
-  try {
-    return readFileSync(filePath, 'utf8');
-  } catch {
-    return null;
-  }
+  try { return readFileSync(filePath, 'utf8'); } catch { return null; }
 }
 
 function readJsonSafe(filePath) {
-  const content = readSafe(filePath);
-  if (!content) return null;
-  try {
-    return JSON.parse(content);
-  } catch {
-    return null;
-  }
+  const c = readSafe(filePath);
+  if (!c) return null;
+  try { return JSON.parse(c); } catch { return null; }
 }
 
 function detectTechStack(pkg, requirements) {
   const stack = new Set();
 
-  // Node/JavaScript/TypeScript
   if (pkg) {
-    const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
-    if (allDeps.typescript) stack.add('TypeScript');
-    if (allDeps.react) stack.add('React');
-    if (allDeps.vue) stack.add('Vue');
-    if (allDeps.svelte) stack.add('Svelte');
-    if (allDeps.express) stack.add('Express');
-    if (allDeps.fastify) stack.add('Fastify');
-    if (allDeps.nest || allDeps['@nestjs/core']) stack.add('NestJS');
-    if (allDeps.vite) stack.add('Vite');
-    if (allDeps.webpack) stack.add('Webpack');
-    if (allDeps.jest) stack.add('Jest');
-    if (allDeps['better-sqlite3'] || allDeps.sqlite3) stack.add('SQLite');
-    if (allDeps.postgres || allDeps.pg) stack.add('PostgreSQL');
-    if (allDeps.mongodb || allDeps.mongoose) stack.add('MongoDB');
-    if (allDeps.zod) stack.add('Zod');
-
-    if (stack.size === 0 && pkg.name) {
-      stack.add('Node.js');
-    }
+    const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+    if (deps.typescript)                       stack.add('TypeScript');
+    if (deps.react)                            stack.add('React');
+    if (deps['react-dom'])                     stack.add('React DOM');
+    if (deps.vue)                              stack.add('Vue');
+    if (deps.svelte)                           stack.add('Svelte');
+    if (deps.next)                             stack.add('Next.js');
+    if (deps.nuxt)                             stack.add('Nuxt');
+    if (deps.express)                          stack.add('Express');
+    if (deps.fastify)                          stack.add('Fastify');
+    if (deps['@nestjs/core'])                  stack.add('NestJS');
+    if (deps.vite)                             stack.add('Vite');
+    if (deps.webpack)                          stack.add('Webpack');
+    if (deps.vitest)                           stack.add('Vitest');
+    if (deps.jest)                             stack.add('Jest');
+    if (deps.mocha)                            stack.add('Mocha');
+    if (deps['@playwright/test'])              stack.add('Playwright');
+    if (deps['better-sqlite3'] || deps.sqlite3) stack.add('SQLite');
+    if (deps.postgres || deps.pg)              stack.add('PostgreSQL');
+    if (deps.mysql2)                           stack.add('MySQL');
+    if (deps.mongodb || deps.mongoose)         stack.add('MongoDB');
+    if (deps.prisma || deps['@prisma/client']) stack.add('Prisma');
+    if (deps.zod)                              stack.add('Zod');
+    if (deps.electron)                         stack.add('Electron');
+    if (deps.tailwindcss)                      stack.add('Tailwind CSS');
+    if (stack.size === 0 && pkg.name)          stack.add('Node.js');
   }
 
-  // Python detection
   if (requirements) {
     stack.add('Python');
-    if (requirements.includes('django')) stack.add('Django');
-    if (requirements.includes('flask')) stack.add('Flask');
-    if (requirements.includes('fastapi')) stack.add('FastAPI');
-    if (requirements.includes('pytest')) stack.add('pytest');
-    if (requirements.includes('numpy')) stack.add('NumPy');
-    if (requirements.includes('pandas')) stack.add('Pandas');
-    if (requirements.includes('scikit-learn')) stack.add('scikit-learn');
-    if (requirements.includes('tensorflow') || requirements.includes('torch')) stack.add('ML/DL');
-    if (requirements.includes('sqlalchemy')) stack.add('SQLAlchemy');
+    if (requirements.includes('django'))       stack.add('Django');
+    if (requirements.includes('flask'))        stack.add('Flask');
+    if (requirements.includes('fastapi'))      stack.add('FastAPI');
+    if (requirements.includes('pytest'))       stack.add('pytest');
+    if (requirements.includes('sqlalchemy'))   stack.add('SQLAlchemy');
   }
 
   return Array.from(stack).sort();
 }
 
+function detectPackageManager(folderPath, pkg) {
+  if (!pkg) return null;
+  if (existsSync(join(folderPath, 'pnpm-lock.yaml'))) return 'pnpm';
+  if (existsSync(join(folderPath, 'yarn.lock')))      return 'yarn';
+  return 'npm';
+}
+
+function extractScripts(pkg) {
+  if (!pkg?.scripts) return {};
+  const relevant = ['test', 'lint', 'typecheck', 'type-check', 'check', 'build', 'dev'];
+  return Object.fromEntries(
+    Object.entries(pkg.scripts).filter(([k]) => relevant.some(r => k === r || k.startsWith(r + ':')))
+  );
+}
+
+function detectHooks(folderPath) {
+  const found = [];
+  if (existsSync(join(folderPath, '.husky')))          found.push('.husky');
+  if (existsSync(join(folderPath, '.lefthook.yml')))   found.push('.lefthook.yml');
+  if (existsSync(join(folderPath, 'lefthook.yml')))    found.push('lefthook.yml');
+  if (existsSync(join(folderPath, '.pre-commit-config.yaml'))) found.push('.pre-commit-config.yaml');
+  return found;
+}
+
 function extractSpecPurpose(content) {
-  // Look for ## Purpose section or first paragraph
-  const purposeMatch = content.match(/##\s+Purpose\s+([\s\S]*?)(?=##|\Z)/i);
-  if (purposeMatch) {
-    return purposeMatch[1].trim().split('\n')[0].slice(0, 200);
+  const m = content.match(/##\s+Purpose\s+([\s\S]*?)(?=##|$)/i);
+  if (m) return m[1].trim().split('\n')[0].slice(0, 300);
+  for (const line of content.split('\n')) {
+    if (line.trim() && !line.startsWith('#')) return line.trim().slice(0, 300);
   }
-
-  // Fallback: first non-empty, non-heading line
-  const lines = content.split('\n');
-  for (const line of lines) {
-    if (line.trim() && !line.startsWith('#')) {
-      return line.trim().slice(0, 200);
-    }
-  }
-
   return undefined;
 }
 
 function extractRules(content) {
+  // Collect all bullet-point rules — no arbitrary cap
   const rules = [];
-  const lines = content.split('\n');
-  for (const line of lines) {
-    if (line.startsWith('- ') || line.startsWith('• ')) {
-      rules.push(line.replace(/^[-•]\s+/, ''));
-      if (rules.length >= 5) break; // Cap at 5 rules
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('• ')) {
+      rules.push(trimmed.replace(/^[-•]\s+/, ''));
     }
   }
   return rules;
 }
 
 function twoLevelTree(folderPath) {
-  const SKIP = new Set(['node_modules', '.git', '.github', 'dist', 'build', '__pycache__', '.env', '.env.local', 'venv', '.vscode', '.idea']);
+  const SKIP = new Set([
+    'node_modules', '.git', '.github', 'dist', 'build', '__pycache__',
+    '.env', '.env.local', 'venv', '.venv', '.vscode', '.idea', 'coverage',
+  ]);
 
   function walk(dir, depth = 0) {
-    if (depth > 2) return '';
-
+    if (depth > 1) return '';
     const indent = '  '.repeat(depth);
     let result = '';
-
     try {
       const entries = readdirSync(dir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.name.startsWith('.') && !entry.isDirectory()) continue;
+        if (entry.name.startsWith('.') && depth > 0) continue;
         if (SKIP.has(entry.name)) continue;
-
         if (entry.isDirectory()) {
           result += `${indent}${entry.name}/\n`;
-          if (depth < 1) {
-            result += walk(join(dir, entry.name), depth + 1);
-          }
+          result += walk(join(dir, entry.name), depth + 1);
         } else if (depth === 0) {
-          // Only show files at root level
           result += `${indent}${entry.name}\n`;
         }
       }
-    } catch {
-      // Skip on permission errors
-    }
-
+    } catch { /* permission error — skip */ }
     return result;
   }
 
   return walk(folderPath).trim();
 }
 
-function buildPromptBlock(context) {
-  let block = `PROJECT CONTEXT:
-Path: ${context.projectPath}`;
+function buildPromptBlock({ projectPath, techStack, packageMgr, scripts, hooks, keyFiles, rules, specPurpose, tree }) {
+  const parts = [`PROJECT CONTEXT\nPath: ${projectPath}`];
 
-  if (context.techStack.length > 0) {
-    block += `\nTech stack: ${context.techStack.join(', ')}`;
+  if (techStack.length > 0) {
+    const pm = packageMgr ? ` (${packageMgr})` : '';
+    parts.push(`Tech stack: ${techStack.join(', ')}${pm}`);
   }
 
-  block += '\n\nKey files found:';
-  for (const file of context.keyFiles) {
-    const icon = file.found ? '✓' : '—';
-    block += `\n- ${file.filename} ${icon}`;
-    if (file.found && file.excerpt) {
-      block += ` — ${file.excerpt}`;
-    }
+  if (Object.keys(scripts).length > 0) {
+    const cmds = Object.entries(scripts).map(([k, v]) => `  ${k}: ${v}`).join('\n');
+    parts.push(`package.json scripts:\n${cmds}`);
   }
 
-  if (context.rules.length > 0) {
-    block += '\n\nCLAUDE.md Rules:';
-    for (const rule of context.rules.slice(0, 3)) {
-      block += `\n- ${rule}`;
-    }
+  if (hooks.length > 0) {
+    parts.push(`Pre-commit hooks detected: ${hooks.join(', ')}`);
   }
 
-  if (context.tree) {
-    block += '\n\nDirectory structure (2 levels):';
-    block += '\n' + context.tree;
+  const found = keyFiles.filter(f => f.found).map(f => f.filename);
+  if (found.length) parts.push(`Companion files: ${found.join(', ')}`);
+
+  if (specPurpose) parts.push(`SPEC purpose: ${specPurpose}`);
+
+  if (rules.length > 0) {
+    parts.push(`CLAUDE.md rules:\n${rules.map(r => `- ${r}`).join('\n')}`);
   }
 
-  return block;
+  if (tree) parts.push(`Directory structure (2 levels):\n${tree}`);
+
+  return parts.join('\n\n');
 }

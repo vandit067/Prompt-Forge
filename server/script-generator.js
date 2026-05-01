@@ -1123,11 +1123,12 @@ function buildSimpleTask(input, taskType, projectContext, userRules = []) {
 // ── Main entry point ──────────────────────────────────────────────────────────
 
 export function generateFromScript(input, taskType, projectContext, userRules = []) {
-  // For non-NEW_TOOL tasks or very short inputs, use the concise simple generator
-  const isComplex = taskType === 'NEW_TOOL' || taskType === 'DATA_INTEGRATION';
-  const features = isComplex ? extractFeatures(input) : [];
+  // Extract features for task types that benefit from multi-session planning
+  const MULTI_SESSION_TYPES = ['NEW_TOOL', 'DATA_INTEGRATION', 'NEW_FEATURE'];
+  const features = MULTI_SESSION_TYPES.includes(taskType) ? extractFeatures(input) : [];
+  const isComplex = features.length >= 2;
 
-  if (!isComplex || features.length < 2) {
+  if (!isComplex) {
     return buildSimpleTask(input, taskType || 'NEW_FEATURE', projectContext, userRules);
   }
 

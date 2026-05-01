@@ -349,6 +349,180 @@ const FEATURE_REGISTRY = [
     ],
     time: '1–2 hours',
   },
+  {
+    id: 'stripe',
+    detect: /\b(stripe|payment|checkout|subscription|billing|invoice|webhook.*pay|pay.*webhook)\b/i,
+    label: 'Stripe Payments',
+    group: 'integration',
+    priority: 25,
+    packages: ['stripe', '@stripe/stripe-js'],
+    envVars: ['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_ID'],
+    routes: [
+      'POST /api/checkout/session  → create Stripe checkout session; returns { url }',
+      'POST /api/webhooks/stripe   → verify HMAC, handle payment events',
+      'POST /api/billing/portal    → create customer billing portal session',
+    ],
+    dbSchema: [
+      '// Add to User model:',
+      '  stripeCustomerId  String?   @unique',
+      '  subscriptionId    String?   @unique',
+      '  plan              String    @default("free")  // "free" | "pro" | "enterprise"',
+      '  planExpiresAt     DateTime?',
+    ],
+    steps: [
+      'npm install stripe @stripe/stripe-js',
+      'Create src/lib/stripe.ts — Stripe server client singleton with STRIPE_SECRET_KEY; export stripe',
+      'Create src/app/api/checkout/session/route.ts — POST; create checkout session with STRIPE_PRICE_ID; success_url = /billing/success, cancel_url = /billing; return { url }',
+      'Create src/app/api/webhooks/stripe/route.ts — POST; stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET); handle: checkout.session.completed → update user plan, invoice.payment_failed → downgrade, customer.subscription.deleted → set plan="free"',
+      'Create src/app/api/billing/portal/route.ts — POST; get user stripeCustomerId from DB; create billing portal session; return { url }',
+      'Add stripeCustomerId, subscriptionId, plan fields to User model; npx prisma migrate dev --name add-stripe',
+      'Verify: POST /api/checkout/session → { url: "https://checkout.stripe.com/..." }; send test event with Stripe CLI → stripe listen --forward-to localhost:3000/api/webhooks/stripe',
+    ],
+    time: '3–4 hours',
+  },
+  {
+    id: 'firebase',
+    detect: /\b(firebase|firestore|realtime.?database|firebase.?auth|fcm|cloud.?messaging|firebase.?storage)\b/i,
+    label: 'Firebase Integration',
+    group: 'infrastructure',
+    priority: 13,
+    packages: ['firebase', 'firebase-admin'],
+    envVars: [
+      'FIREBASE_PROJECT_ID', 'FIREBASE_CLIENT_EMAIL', 'FIREBASE_PRIVATE_KEY',
+      'NEXT_PUBLIC_FIREBASE_API_KEY', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
+      'NEXT_PUBLIC_FIREBASE_PROJECT_ID', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET',
+    ],
+    steps: [
+      'npm install firebase firebase-admin',
+      'Create src/lib/firebase-admin.ts — initializeApp() with { credential: cert({ projectId, clientEmail, privateKey }) }; export adminAuth, adminFirestore, adminStorage',
+      'Create src/lib/firebase.ts — "use client"; initializeApp() with NEXT_PUBLIC_FIREBASE_* vars; export auth, db (Firestore), storage; use singleton pattern to avoid duplicate init',
+      'Create src/services/firebase.ts — typed CRUD wrappers: getDoc<T>(), setDoc<T>(), updateDoc<T>(), deleteDoc(), queryCollection<T>(ref, ...constraints)',
+      'Add Firebase Auth middleware to src/middleware.ts — extract Authorization header, adminAuth.verifyIdToken(token), attach uid to request',
+      'Create src/hooks/useFirebaseAuth.ts — "use client"; onAuthStateChanged subscription, return { user, loading, signIn, signOut }',
+      'Verify: adminAuth.listUsers() → returns UserRecord list; Firestore adminFirestore.collection("_test").add({ts: Date.now()}) → writes document',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'supabase',
+    detect: /\b(supabase|supabase.?auth|supabase.?storage|supabase.?realtime|supabase.?edge)\b/i,
+    label: 'Supabase Integration',
+    group: 'infrastructure',
+    priority: 14,
+    packages: ['@supabase/supabase-js', '@supabase/ssr'],
+    envVars: [
+      'NEXT_PUBLIC_SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY',
+    ],
+    routes: ['GET /api/auth/callback → exchange OAuth code for session'],
+    steps: [
+      'npm install @supabase/supabase-js @supabase/ssr',
+      'Create src/lib/supabase/client.ts — createBrowserClient(NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY) singleton for client components',
+      'Create src/lib/supabase/server.ts — createServerClient() using cookies() from next/headers; export for Server Components and Route Handlers',
+      'Create src/lib/supabase/admin.ts — createClient(url, SUPABASE_SERVICE_ROLE_KEY) for admin-only server operations (bypasses RLS)',
+      'Create src/app/api/auth/callback/route.ts — GET; exchange code with supabase.auth.exchangeCodeForSession(code); redirect to /dashboard',
+      'Update src/middleware.ts — @supabase/ssr createServerClient with request/response cookies; call supabase.auth.getUser() to refresh session on every request',
+      'Verify: supabase.auth.getUser() returns user after OAuth; RLS policies enabled in Supabase dashboard → unauthorized reads return empty array',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'trpc',
+    detect: /\b(trpc|t3.?stack|t3.?app)\b/i,
+    label: 'tRPC API Layer',
+    group: 'infrastructure',
+    priority: 15,
+    packages: ['@trpc/server', '@trpc/client', '@trpc/react-query', '@trpc/next', '@tanstack/react-query'],
+    envVars: [],
+    steps: [
+      'npm install @trpc/server @trpc/client @trpc/react-query @trpc/next @tanstack/react-query',
+      'Create src/server/trpc.ts — initTRPC.context<Context>().create(); export publicProcedure, protectedProcedure (middleware: if !ctx.session throw UNAUTHORIZED), router',
+      'Create src/server/routers/_app.ts — appRouter with sub-routers; export type AppRouter = typeof appRouter',
+      'Create src/app/api/trpc/[trpc]/route.ts — fetchRequestHandler({ router: appRouter, createContext }); export GET, POST',
+      'Create src/trpc/client.ts — createTRPCReact<AppRouter>(); httpBatchLink pointing to /api/trpc',
+      'Create src/trpc/server.ts — createTRPCContext for SSR with headers(); createCaller(appRouter) for use in Server Components',
+      'Wrap src/app/layout.tsx with TRPCReactProvider (QueryClientProvider + trpcClient)',
+      'Verify: add healthRouter with publicProcedure.query(() => ({ ok: true, ts: Date.now() })); curl /api/trpc/health → { result: { data: { ok: true } } }',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'graphql',
+    detect: /\b(graphql|apollo.?server|apollo.?client|graphene|hasura|relay)\b/i,
+    label: 'GraphQL API',
+    group: 'infrastructure',
+    priority: 16,
+    packages: ['@apollo/server', '@apollo/client', 'graphql', '@graphql-codegen/cli'],
+    envVars: [],
+    routes: ['POST /api/graphql → Apollo Server (introspection enabled in dev only)'],
+    steps: [
+      'npm install @apollo/server @apollo/client graphql && npm install -D @graphql-codegen/cli @graphql-codegen/typescript @graphql-codegen/typescript-resolvers',
+      'Create src/graphql/schema.ts — buildSchema or gql tag; define base Query { health: String } + Mutation type; scalars: DateTime, JSON',
+      'Create src/graphql/resolvers.ts — resolver map typed against generated TypeScript types; separate files per domain under src/graphql/resolvers/',
+      'Create src/app/api/graphql/route.ts — ApolloServer with typeDefs + resolvers; startServerAndCreateNextHandler; introspection only in dev',
+      'Create codegen.yml — schema: ./src/graphql/schema.ts; generates: src/graphql/__generated__/types.ts',
+      'Create src/lib/apollo-client.ts — ApolloClient with InMemoryCache + HttpLink to /api/graphql; singleton for SSR with makeVar for reactive variables',
+      'Verify: POST /api/graphql { query: "{ health }" } → { data: { health: "ok" } }; codegen generates 0 TS errors',
+    ],
+    time: '3–4 hours',
+  },
+  {
+    id: 'websockets',
+    detect: /\b(websocket|web.?socket|socket\.?io|real.?time|live.?update|sse|server.?sent.?event|push.?notification|event.?stream)\b/i,
+    label: 'Real-time WebSockets',
+    group: 'integration',
+    priority: 43,
+    packages: ['socket.io', 'socket.io-client'],
+    envVars: [],
+    routes: ['GET /api/socket → Socket.IO upgrade handshake'],
+    steps: [
+      'npm install socket.io socket.io-client',
+      'Create server/socket.ts — attach Socket.IO to the same HTTP server; define rooms per resource (e.g. config:{key}); events: connection, disconnect, join-room, leave-room',
+      'Create src/lib/socket.ts — "use client"; socket.io-client singleton; connect() / disconnect() helpers; auto-reconnect with { reconnectionDelay: 1000, reconnectionDelayMax: 5000 }',
+      'Create src/hooks/useSocket.ts — "use client"; connect on mount, join room(s) based on props, cleanup on unmount; expose emit() and on(event, handler)',
+      'Create src/components/RealtimeIndicator.tsx — green dot when socket.connected, gray when disconnected; tooltip with latency',
+      'After each DB mutation in API routes, emit targeted event: io.to(`config:${key}`).emit("updated", { key, value, updatedAt })',
+      'Verify: open 2 browser tabs at /dashboard; update config in tab 1; tab 2 receives "updated" event in Chrome DevTools WS frame within 100ms',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'docker',
+    detect: /\b(docker|container|k8s|kubernetes|ci.?cd|github.?action|dockerfile|compose|deploy|production.?build)\b/i,
+    label: 'Docker & CI/CD',
+    group: 'infrastructure',
+    priority: 17,
+    packages: [],
+    envVars: ['PORT', 'NODE_ENV'],
+    steps: [
+      'Create Dockerfile — stage 1 (deps): FROM node:20-alpine AS deps; COPY package*.json; npm ci --frozen-lockfile — stage 2 (build): COPY --from=deps . && npm run build — stage 3 (runner): copy .next/standalone + public; EXPOSE 3000',
+      'Create .dockerignore — exclude: node_modules, .next, .env*, .git, coverage, *.log',
+      'Create docker-compose.yml — services: app (build ., env_file: .env, ports: 3000:3000), db (postgres:16-alpine, volumes: pg-data:/var/lib/postgresql/data), redis (redis:7-alpine)',
+      'Create .github/workflows/ci.yml — on: push to main + PRs; jobs: lint (npm run lint), typecheck (npx tsc --noEmit), build (npm run build); cache: node_modules by package-lock hash',
+      'Create .github/workflows/deploy.yml — on: tag push v*.*.* ; build + tag + push Docker image to ghcr.io; deploy step via SSH or cloud CLI',
+      'Add HEALTHCHECK to Dockerfile: CMD curl -f http://localhost:3000/api/health || exit 1; create src/app/api/health/route.ts — GET returns { ok: true, ts: Date.now() }',
+      'Verify: docker compose up --build → app at http://localhost:3000/api/health returns 200; CI workflow triggers on PR and all jobs pass',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'queue',
+    detect: /\b(queue|job.?queue|background.?job|worker|bullmq|bull\.?mq|task.?queue|cron.?job|async.?job|deferred)\b/i,
+    label: 'Background Jobs (BullMQ)',
+    group: 'infrastructure',
+    priority: 18,
+    packages: ['bullmq', 'ioredis'],
+    envVars: ['REDIS_URL'],
+    steps: [
+      'npm install bullmq ioredis',
+      'Create src/lib/queues.ts — IORedis connection from REDIS_URL; define named Queues: notificationQueue, reportQueue, emailQueue; export all',
+      'Create src/workers/notification.worker.ts — Worker(notificationQueue, async job => { ... }, { connection, concurrency: 5 }); handle job.data typed with Zod; retry: { attempts: 3, backoff: { type: "exponential", delay: 2000 } }',
+      'Create src/workers/index.ts — import + start all workers; graceful shutdown on SIGTERM: await Promise.all(workers.map(w => w.close()))',
+      'Create src/app/api/jobs/route.ts — POST enqueue job: { type, payload } validated with Zod; GET list jobs by queue + state; DELETE cancel job by id',
+      'Add WORKER_ENABLED=true env var; in package.json add "worker": "tsx src/workers/index.ts" script; in docker-compose add worker service with command: npm run worker',
+      'Verify: POST /api/jobs { type: "notification", payload: { userId, message } } → 202 { jobId }; GET /api/jobs?jobId={id} → { state: "completed", returnvalue: {...} }',
+    ],
+    time: '2–3 hours',
+  },
 ];
 
 // ── Stack Profiles ────────────────────────────────────────────────────────────
@@ -378,6 +552,33 @@ const STACK_PROFILES = {
       'prisma/           — Prisma schema + migrations',
       'docs/             — MDX documentation files',
       'public/           — static assets',
+    ],
+  },
+
+  fastapi: {
+    label: 'FastAPI + Python 3.11 + PostgreSQL + SQLAlchemy 2.0 + Alembic',
+    core: ['Python 3.11', 'FastAPI 0.110', 'Pydantic v2'],
+    styling: [],
+    db: ['PostgreSQL', 'SQLAlchemy 2.0', 'Alembic'],
+    packageMgr: 'pip',
+    scaffold: 'python -m venv venv && source venv/bin/activate && pip install "fastapi[all]" sqlalchemy alembic psycopg2-binary pydantic-settings python-jose[cryptography] python-multipart pytest httpx',
+    devCmd: 'uvicorn app.main:app --reload --port 8000',
+    buildCmd: 'pip install -r requirements.txt',
+    typecheckCmd: 'mypy app/ --ignore-missing-imports',
+    lintCmd: 'ruff check app/',
+    testCmd: 'pytest -v',
+    structure: [
+      'app/main.py         — FastAPI app instance, router includes, lifespan events',
+      'app/routers/        — route handlers grouped by feature domain',
+      'app/models/         — SQLAlchemy ORM models',
+      'app/schemas/        — Pydantic v2 request/response models',
+      'app/services/       — business logic, external API clients',
+      'app/core/           — config (pydantic-settings BaseSettings), security, dependencies',
+      'app/database.py     — async SQLAlchemy engine + session factory',
+      'alembic/            — Alembic env.py + migration versions/',
+      'tests/              — pytest fixtures, unit + integration tests',
+      'requirements.txt    — pinned dependencies',
+      '.env                — DATABASE_URL, SECRET_KEY, env-specific vars',
     ],
   },
 };
@@ -412,20 +613,32 @@ function extractFeatures(input) {
     .sort((a, b) => a.priority - b.priority);
 }
 
-function advisedStack(projectContext) {
+const PYTHON_DETECT_RE = /\b(fastapi|django|flask|uvicorn|pydantic|sqlalchemy|alembic|celery|pytest|asyncio|python|\.py\b|pip install)\b/i;
+
+function detectInputStack(input) {
+  return PYTHON_DETECT_RE.test(input) ? 'fastapi' : 'nextjs';
+}
+
+function advisedStack(projectContext, input) {
+  // Scanned context takes priority
   if (projectContext?.techStack?.length) {
+    const techStr = projectContext.techStack.join(' ').toLowerCase();
+    const isPython = /python|fastapi|django|flask/.test(techStr);
+    const base = isPython ? STACK_PROFILES.fastapi : STACK_PROFILES.nextjs;
     return {
-      ...STACK_PROFILES.nextjs,
-      core: projectContext.techStack,
-      packageMgr: projectContext.packageMgr || 'npm',
-      devCmd:       projectContext.scripts?.dev       || 'npm run dev',
-      buildCmd:     projectContext.scripts?.build     || 'npm run build',
-      typecheckCmd: projectContext.scripts?.typecheck || 'npx tsc --noEmit',
-      lintCmd:      projectContext.scripts?.lint      || 'npm run lint',
-      testCmd:      projectContext.scripts?.test      || 'npm run test',
+      ...base,
+      core:         projectContext.techStack,
+      packageMgr:   projectContext.packageMgr || base.packageMgr,
+      devCmd:       projectContext.scripts?.dev       || base.devCmd,
+      buildCmd:     projectContext.scripts?.build     || base.buildCmd,
+      typecheckCmd: projectContext.scripts?.typecheck || base.typecheckCmd,
+      lintCmd:      projectContext.scripts?.lint      || base.lintCmd,
+      testCmd:      projectContext.scripts?.test      || base.testCmd,
     };
   }
-  return STACK_PROFILES.nextjs;
+  // Fall back to input detection
+  const profileKey = input ? detectInputStack(input) : 'nextjs';
+  return STACK_PROFILES[profileKey];
 }
 
 // ── Session builders ──────────────────────────────────────────────────────────
@@ -719,7 +932,7 @@ function buildTitle(input) {
 // ── Simple task generators (BUG_FIX, CODE_REVIEW, etc.) ──────────────────────
 
 function buildSimpleTask(input, taskType, projectContext) {
-  const stack = advisedStack(projectContext);
+  const stack = advisedStack(projectContext, input);
   const pm = stack.packageMgr;
   const tc = stack.typecheckCmd;
 
@@ -918,7 +1131,7 @@ export function generateFromScript(input, taskType, projectContext) {
 
   // ── Advanced multi-session planning for complex NEW_TOOL tasks ──
 
-  const stack = advisedStack(projectContext);
+  const stack = advisedStack(projectContext, input);
   const title = buildTitle(input);
 
   // Ensure database session is included if any feature needs a DB schema

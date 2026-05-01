@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { stmts } from './db.js';
 import { scanProject } from './project-scanner.js';
 import { generateFromScript } from './script-generator.js';
+import { parseInput } from './input-parser.js';
 
 const app = express();
 app.use(cors());
@@ -395,10 +396,21 @@ function extractJSON(text) {
 // POST /api/generate — route to active backend with script fallback
 app.post('/api/generate', async (req, res) => {
 
-  const { input, projectPath, projectContext, taskType } = req.body;
+  const { input, projectPath, projectContext } = req.body;
+  let { taskType } = req.body;
 
   if (!input?.trim()) {
     return res.status(400).json({ error: 'input required' });
+  }
+
+  // Parse input — detect stack traces, GitHub issues, etc.
+  const parsed_input = parseInput(input.trim());
+  const enrichedInput = parsed_input.enriched;
+  // Stack traces always override to BUG_FIX — server-side detection is more reliable than client keyword match
+  if (parsed_input.isStackTrace) {
+    taskType = 'BUG_FIX';
+  } else if (parsed_input.suggestedTaskType && !taskType) {
+    taskType = parsed_input.suggestedTaskType;
   }
 
   // Build known issues from past failures
@@ -459,7 +471,8 @@ app.post('/api/generate', async (req, res) => {
 
   const userMessage = [
     `TASK_TYPE: ${taskType || 'NEW_FEATURE'}`,
-    `REQUEST: ${input.trim()}`,
+    parsed_input.type !== 'plain' ? `INPUT_TYPE: ${parsed_input.type}` : null,
+    `REQUEST: ${enrichedInput}`,
     projectPath ? `PROJECT_PATH: ${projectPath}` : null,
     contextBlock || null,
     knownIssuesBlock || null,
@@ -473,12 +486,12 @@ app.post('/api/generate', async (req, res) => {
     } else if (activeBackend.backend === 'ollama') {
       parsed = await generateViaOllama(userMessage);
     } else {
-      parsed = generateFromScript(input, taskType || 'NEW_FEATURE', projectContext);
+      parsed = generateFromScript(enrichedInput, taskType || 'NEW_FEATURE', projectContext);
     }
   } catch (err) {
     console.warn(`[backend] ${activeBackend.backend} failed (${err.message}) — falling back to script`);
     try {
-      parsed = generateFromScript(input, taskType || 'NEW_FEATURE', projectContext);
+      parsed = generateFromScript(enrichedInput, taskType || 'NEW_FEATURE', projectContext);
     } catch (scriptErr) {
       return res.status(500).json({ error: err.message || 'Generation failed' });
     }

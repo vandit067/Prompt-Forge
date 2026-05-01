@@ -1249,6 +1249,186 @@ function ChecklistTab() {
   );
 }
 
+/* ─── Clarifying Questions ─── */
+
+interface ClarifyQuestion {
+  id: string;
+  label: string;
+  placeholder: string;
+  optional?: boolean;
+}
+
+const STACKTRACE_RE = /at\s+[\w.<>\[\] /]+\s+\(.*?:\d+:\d+\)|Traceback \(most recent call last\):|at\s+[\w.$]+\.[\w$]+\([\w.]+:\d+\)/;
+
+function analyzeForClarification(input: string): ClarifyQuestion[] {
+  // Stack traces are self-describing — no clarification needed
+  if (STACKTRACE_RE.test(input)) return [];
+
+  const questions: ClarifyQuestion[] = [];
+
+  const hasStack = /\b(react|next\.?js|vue|angular|svelte|django|fastapi|flask|rails|express|node\.?js|laravel|spring|flutter|kotlin|swift|rust|go\b|golang|python)\b/i.test(input);
+  if (!hasStack && input.length > 50) {
+    questions.push({
+      id: 'stack',
+      label: 'What tech stack?',
+      placeholder: 'e.g. Next.js + TypeScript, Django + React, or Node.js CLI',
+    });
+  }
+
+  const mentionsUsers = /\b(user|account|dashboard|admin|login|auth|member|role)\b/i.test(input);
+  const hasAuthClarity = /\b(no auth|public|open|nextauth|firebase auth|supabase|clerk|no login|auth0)\b/i.test(input);
+  if (mentionsUsers && !hasAuthClarity && questions.length < 2) {
+    questions.push({
+      id: 'auth',
+      label: 'Authentication approach?',
+      placeholder: 'e.g. NextAuth + Google, Supabase Auth, or none',
+      optional: true,
+    });
+  }
+
+  if (input.length > 80 && questions.length < 2) {
+    const hasConstraints = /\b(offline|no paid|free.?tier|no api key|local.?only|deadline|ship in|within \d|self.?host)\b/i.test(input);
+    if (!hasConstraints) {
+      questions.push({
+        id: 'constraints',
+        label: 'Any constraints?',
+        placeholder: 'e.g. no paid APIs, must work offline, ship in 2 days',
+        optional: true,
+      });
+    }
+  }
+
+  return questions.slice(0, 2);
+}
+
+function buildEnrichedInput(baseInput: string, answers: Record<string, string>): string {
+  const extras = Object.entries(answers)
+    .filter(([, v]) => v.trim())
+    .map(([k, v]) => {
+      if (k === 'stack') return `Stack: ${v}`;
+      if (k === 'auth') return `Auth approach: ${v}`;
+      if (k === 'constraints') return `Constraints: ${v}`;
+      return `${k}: ${v}`;
+    });
+  if (extras.length === 0) return baseInput;
+  return `${baseInput}\n\nAdditional context:\n${extras.map(e => `- ${e}`).join('\n')}`;
+}
+
+interface ClarifyPanelProps {
+  questions: ClarifyQuestion[];
+  answers: Record<string, string>;
+  onAnswer: (id: string, value: string) => void;
+  onConfirm: () => void;
+  onSkip: () => void;
+}
+
+function ClarifyPanel({ questions, answers, onAnswer, onConfirm, onSkip }: ClarifyPanelProps) {
+  return (
+    <div
+      style={{
+        background: '#0d1828',
+        border: '1px solid #1e3a5f',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        animation: 'slideDown 0.15s ease-out',
+      }}
+    >
+      <style>{`@keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <div
+        style={{
+          padding: '10px 14px',
+          borderBottom: '1px solid #1e3a5f',
+          background: '#0a1020',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
+        <span style={{ fontSize: '11px', color: '#93c5fd', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+          Quick questions
+        </span>
+        <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+          — helps generate better prompts
+        </span>
+      </div>
+      <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {questions.map(q => (
+          <div key={q.id}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                color: '#a1a1aa',
+                fontFamily: '"JetBrains Mono", monospace',
+                marginBottom: '6px',
+              }}
+            >
+              {q.label}
+              {q.optional && (
+                <span style={{ color: '#52525b', marginLeft: '6px' }}>optional</span>
+              )}
+            </label>
+            <input
+              value={answers[q.id] || ''}
+              onChange={e => onAnswer(q.id, e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onConfirm(); }}
+              placeholder={q.placeholder}
+              style={{
+                width: '100%',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                padding: '8px 10px',
+                color: '#fafafa',
+                fontSize: '13px',
+                fontFamily: '"Inter", system-ui, sans-serif',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+              onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+              onBlur={e => (e.target.style.borderColor = '#27272a')}
+              autoFocus={q === questions[0]}
+            />
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: '8px', paddingTop: '2px' }}>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '7px 16px',
+              borderRadius: '7px',
+              border: 'none',
+              background: '#22c55e',
+              color: '#000',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: '"Inter", system-ui, sans-serif',
+            }}
+          >
+            Generate
+          </button>
+          <button
+            onClick={onSkip}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '7px',
+              border: '1px solid #27272a',
+              background: 'transparent',
+              color: '#71717a',
+              fontSize: '12px',
+              cursor: 'pointer',
+              fontFamily: '"Inter", system-ui, sans-serif',
+            }}
+          >
+            Skip
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Command Center ─── */
 interface Props {
   onGenerate: (input: string, projectPath?: string) => Promise<void>;
@@ -1285,6 +1465,9 @@ export function CommandCenter({
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
   const [activeTab, setActiveTab] = useState<OutputTab>('prompts');
+  const [clarifyState, setClarifyState] = useState<'idle' | 'asking'>('idle');
+  const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
+  const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -1295,10 +1478,27 @@ export function CommandCenter({
     el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   }, [input]);
 
+  function doGenerate(baseInput: string, answers: Record<string, string>) {
+    const enriched = buildEnrichedInput(baseInput, answers);
+    setClarifyState('idle');
+    setClarifyQuestions([]);
+    setClarifyAnswers({});
+    onGenerate(enriched, projectMode === 'existing' ? projectPath : undefined);
+    setInput('');
+  }
+
   function handleSubmit() {
     if (!input.trim() || isGenerating) return;
-    onGenerate(input.trim(), projectMode === 'existing' ? projectPath : undefined);
-    setInput('');
+    if (clarifyState === 'idle') {
+      const questions = analyzeForClarification(input.trim());
+      if (questions.length > 0) {
+        setClarifyQuestions(questions);
+        setClarifyAnswers({});
+        setClarifyState('asking');
+        return;
+      }
+    }
+    doGenerate(input.trim(), clarifyAnswers);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -1581,6 +1781,17 @@ export function CommandCenter({
             </div>
           </div>
         </div>
+
+        {/* Clarifying questions panel */}
+        {clarifyState === 'asking' && (
+          <ClarifyPanel
+            questions={clarifyQuestions}
+            answers={clarifyAnswers}
+            onAnswer={(id, value) => setClarifyAnswers(prev => ({ ...prev, [id]: value }))}
+            onConfirm={() => doGenerate(input.trim(), clarifyAnswers)}
+            onSkip={() => doGenerate(input.trim(), {})}
+          />
+        )}
 
         {/* Project context (when existing mode) */}
         {projectMode === 'existing' && (

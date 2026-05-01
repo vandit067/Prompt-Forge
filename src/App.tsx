@@ -131,6 +131,16 @@ export default function App() {
     handleGenerate(retryInput, task.projectPath);
   }
 
+  async function handleRefine(taskId: string, refinement: string) {
+    try {
+      const updated = await api.refine(taskId, refinement, userRules);
+      setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
+      setLiveTask(updated);
+    } catch (err) {
+      console.error('Refinement failed:', err);
+    }
+  }
+
   function handleImport(importedTasks: Task[]) {
     setTasks(prev => {
       const existing = new Set(prev.map(t => t.id));
@@ -182,6 +192,7 @@ export default function App() {
             isScanning={isScanning}
             scanError={scanError}
             onScanProject={handleScanProject}
+            onRefine={handleRefine}
             activeBackend={activeBackend}
           />
         );
@@ -202,6 +213,7 @@ export default function App() {
             scanError={scanError}
             onScanProject={handleScanProject}
             knownIssuesCount={knownIssuesCount}
+            onRefine={handleRefine}
             activeBackend={activeBackend}
           />
         );

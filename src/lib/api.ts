@@ -41,6 +41,13 @@ export const api = {
       signal: AbortSignal.timeout(180_000),
     } as RequestInit),
 
+  refine: (taskId: string, refinement: string, userRules?: string[]) =>
+    request<Task>(`/api/tasks/${taskId}/refine`, {
+      method: 'POST',
+      body: JSON.stringify({ refinement, userRules }),
+      signal: AbortSignal.timeout(180_000),
+    } as RequestInit),
+
   getBackend: () =>
     request<ActiveBackend>('/api/backend'),
 };

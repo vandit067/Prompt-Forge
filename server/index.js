@@ -582,6 +582,81 @@ app.patch('/api/tasks/:id', (req, res) => {
   }
 });
 
+// POST /api/tasks/:id/refine — refine existing task prompts with new instructions
+app.post('/api/tasks/:id/refine', async (req, res) => {
+  const { refinement, userRules } = req.body;
+  const taskId = req.params.id;
+
+  if (!refinement?.trim()) {
+    return res.status(400).json({ error: 'refinement required' });
+  }
+
+  const row = stmts.getTask.get(taskId);
+  if (!row) return res.status(404).json({ error: 'Task not found' });
+  const task = rowToTask(row);
+
+  const promptsText = task.generatedPrompts
+    .map(p => `--- ${p.sessionLabel} ---\n${p.content}`)
+    .join('\n\n');
+
+  const userRulesBlock = Array.isArray(userRules) && userRules.length
+    ? `\nPERSONAL RULES (treat as additional hard constraints):\n${userRules.map(r => `- ${r}`).join('\n')}`
+    : '';
+
+  const userMessage = [
+    `TASK_TYPE: ${task.taskType}`,
+    `ORIGINAL_REQUEST: ${task.input}`,
+    `CURRENT_PROMPTS:\n${promptsText}`,
+    `REFINEMENT_REQUEST: ${refinement.trim()}`,
+    userRulesBlock || null,
+    '\nRevise the prompts above based on the refinement request. Keep the same JSON output format.',
+  ].filter(Boolean).join('\n');
+
+  let parsed;
+  try {
+    if (activeBackend.backend === 'anthropic') {
+      parsed = await generateViaAnthropic(userMessage);
+    } else if (activeBackend.backend === 'ollama') {
+      parsed = await generateViaOllama(userMessage);
+    } else {
+      const enriched = `${task.input}\n\nRefinement: ${refinement.trim()}`;
+      parsed = generateFromScript(enriched, task.taskType, task.projectContext, userRules);
+    }
+  } catch (err) {
+    console.warn(`[backend] refine failed (${err.message}) — falling back to script`);
+    try {
+      const enriched = `${task.input}\n\nRefinement: ${refinement.trim()}`;
+      parsed = generateFromScript(enriched, task.taskType, task.projectContext, userRules);
+    } catch {
+      return res.status(500).json({ error: err.message || 'Refinement failed' });
+    }
+  }
+
+  const now = new Date().toISOString();
+  const updatedPrompts   = (parsed.generatedPrompts || []).map(p => ({ id: uid(), sessionLabel: p.sessionLabel, content: p.content }));
+  const updatedFiles     = (parsed.generatedFiles || []).map(f => ({ id: uid(), filename: f.filename, content: f.content }));
+  const updatedPlan      = (parsed.generatedPlan || []).map(s => ({ session: s.session, title: s.title, description: s.description, estimatedTime: s.estimatedTime }));
+  const updatedChecklist = parsed.generatedChecklist || [];
+
+  stmts.updateTaskPrompts.run({
+    id:                  taskId,
+    generated_prompts:   JSON.stringify(updatedPrompts),
+    generated_files:     JSON.stringify(updatedFiles),
+    generated_plan:      JSON.stringify(updatedPlan),
+    generated_checklist: JSON.stringify(updatedChecklist),
+    updated_at:          now,
+  });
+
+  res.json({
+    ...task,
+    generatedPrompts:    updatedPrompts,
+    generatedFiles:      updatedFiles,
+    generatedPlan:       updatedPlan,
+    generatedChecklist:  updatedChecklist,
+    updatedAt:           now,
+  });
+});
+
 // GET /api/settings — get all user settings
 app.get('/api/settings', (_req, res) => {
   try {

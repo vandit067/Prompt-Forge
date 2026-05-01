@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List } from 'lucide-react';
+import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
@@ -101,6 +101,162 @@ function QualityBadge({ score }: { score: QualityScore }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── Export as Markdown ─── */
+function exportTaskMarkdown(task: Task): void {
+  const lines: string[] = [`# ${task.title}`, '', `**Type:** ${task.taskType}`, `**Created:** ${new Date(task.createdAt).toLocaleString()}`, ''];
+
+  if (task.generatedPrompts.length > 0) {
+    lines.push('## Prompts', '');
+    for (const p of task.generatedPrompts) {
+      lines.push(`### ${p.sessionLabel}`, '', '```', p.content, '```', '');
+    }
+  }
+
+  if (task.generatedFiles.length > 0) {
+    lines.push('## Supporting Files', '');
+    for (const f of task.generatedFiles) {
+      lines.push(`### ${f.filename}`, '', '```', f.content, '```', '');
+    }
+  }
+
+  if (task.generatedPlan.length > 0) {
+    lines.push('## Implementation Plan', '');
+    for (const s of task.generatedPlan) {
+      lines.push(`${s.session}. **${s.title}** (${s.estimatedTime})`, `   ${s.description}`, '');
+    }
+  }
+
+  if (task.generatedChecklist.length > 0) {
+    lines.push('## Verification Checklist', '');
+    for (const item of task.generatedChecklist) {
+      lines.push(`- [ ] ${item}`);
+    }
+    lines.push('');
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ─── Refinement Panel ─── */
+interface RefinementPanelProps {
+  task: Task;
+  onRefine: (taskId: string, refinement: string) => Promise<void>;
+}
+
+function RefinementPanel({ task, onRefine }: RefinementPanelProps) {
+  const [text, setText] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleRefine() {
+    if (!text.trim() || isRefining) return;
+    setIsRefining(true);
+    setDone(false);
+    try {
+      await onRefine(task.id, text.trim());
+      setText('');
+      setDone(true);
+      setTimeout(() => setDone(false), 3000);
+    } finally {
+      setIsRefining(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: '#0a0f1a',
+        border: '1px solid #1e3a5f',
+        borderRadius: '10px',
+        overflow: 'hidden',
+        marginTop: '8px',
+      }}
+    >
+      <div
+        style={{
+          padding: '8px 14px',
+          borderBottom: '1px solid #1e3a5f',
+          background: '#060d18',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '7px',
+        }}
+      >
+        <RefreshCw size={11} color="#60a5fa" />
+        <span style={{ fontSize: '11px', color: '#60a5fa', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+          Refine prompts
+        </span>
+        <span style={{ fontSize: '10px', color: '#3b4a63', fontFamily: '"JetBrains Mono", monospace' }}>
+          — regenerate with additional instructions
+        </span>
+      </div>
+      <div style={{ padding: '12px 14px', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleRefine(); }}
+          placeholder="e.g. Add error handling for network failures, make steps more granular, or split Session 2 into two sessions"
+          rows={2}
+          style={{
+            flex: 1,
+            background: '#0f1623',
+            border: '1px solid #1e3a5f',
+            borderRadius: '7px',
+            padding: '9px 12px',
+            color: '#fafafa',
+            fontSize: '12px',
+            fontFamily: '"Inter", system-ui, sans-serif',
+            lineHeight: '1.5',
+            resize: 'none',
+            outline: 'none',
+          }}
+          onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+          onBlur={e => (e.target.style.borderColor = '#1e3a5f')}
+        />
+        <button
+          onClick={handleRefine}
+          disabled={!text.trim() || isRefining}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '8px 14px',
+            borderRadius: '7px',
+            border: 'none',
+            background: done ? '#14532d' : (!text.trim() || isRefining ? '#1e3a5f55' : '#2563eb'),
+            color: done ? '#22c55e' : (!text.trim() || isRefining ? '#3b4a63' : '#fff'),
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: !text.trim() || isRefining ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+            fontFamily: '"Inter", system-ui, sans-serif',
+            transition: 'all 0.12s',
+            flexShrink: 0,
+          }}
+        >
+          {done ? '✓ Done' : isRefining ? (
+            <>
+              <div style={{ width: '11px', height: '11px', border: '1.5px solid #3b4a63', borderTopColor: '#60a5fa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              Refining…
+            </>
+          ) : (
+            <>
+              <RefreshCw size={11} />
+              Refine
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1589,6 +1745,7 @@ interface Props {
   onScanProject?: (path: string) => Promise<void>;
   knownIssuesCount?: number;
   activeBackend?: ActiveBackend | null;
+  onRefine?: (taskId: string, refinement: string) => Promise<void>;
 }
 
 export function CommandCenter({
@@ -1605,6 +1762,7 @@ export function CommandCenter({
   onScanProject,
   knownIssuesCount = 0,
   activeBackend,
+  onRefine,
 }: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
@@ -2025,6 +2183,30 @@ export function CommandCenter({
                 {new Date(selectedTask.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </span>
               <button
+                onClick={() => exportTaskMarkdown(selectedTask)}
+                title="Export as Markdown"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'none',
+                  border: '1px solid #27272a',
+                  color: '#71717a',
+                  cursor: 'pointer',
+                  padding: '3px 8px',
+                  borderRadius: '5px',
+                  fontSize: '10px',
+                  fontFamily: '"JetBrains Mono", monospace',
+                  flexShrink: 0,
+                  transition: 'all 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a1a1aa'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#3f3f46'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#71717a'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#27272a'; }}
+              >
+                <Download size={10} />
+                .md
+              </button>
+              <button
                 onClick={onClearSelection}
                 title="Close"
                 style={{
@@ -2045,6 +2227,7 @@ export function CommandCenter({
               </button>
             </div>
             <OutputPanel task={selectedTask} />
+            {onRefine && <RefinementPanel task={selectedTask} onRefine={onRefine} />}
           </div>
         ) : (
           /* ── Default demo: hardcoded fake tabs ── */

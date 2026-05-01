@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Terminal, Download, Upload, RotateCcw, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Terminal, Download, Upload, RotateCcw, CheckCircle2, Plus, X } from 'lucide-react';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import { api } from '../lib/api';
 import type { Task } from '../types';
@@ -8,6 +8,8 @@ interface Props {
   tasks: Task[];
   onImport: (tasks: Task[]) => void;
   onResetPatterns: () => void;
+  userRules: string[];
+  onRulesChange: (rules: string[]) => void;
 }
 
 function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
@@ -151,7 +153,7 @@ function ActionButton({
   );
 }
 
-export function Settings({ tasks, onImport, onResetPatterns }: Props) {
+export function Settings({ tasks, onImport, onResetPatterns, userRules, onRulesChange }: Props) {
   const [cliPath, setCliPath] = useState('claude');
   const [defaultPath, setDefaultPath] = useState('');
   const [constraints, setConstraints] = useState({
@@ -162,30 +164,40 @@ export function Settings({ tasks, onImport, onResetPatterns }: Props) {
   });
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [newRule, setNewRule] = useState('');
+  const ruleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Load settings from DB on mount
     api.getSettings()
       .then(settings => {
         if (settings.cliPath) setCliPath(settings.cliPath);
         if (settings.defaultPath) setDefaultPath(settings.defaultPath);
         if (settings.constraints) {
-          try {
-            setConstraints(JSON.parse(settings.constraints));
-          } catch {
-            // Keep defaults if parse fails
-          }
+          try { setConstraints(JSON.parse(settings.constraints)); } catch {}
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
 
+  function addRule() {
+    const trimmed = newRule.trim();
+    if (!trimmed || userRules.includes(trimmed)) return;
+    onRulesChange([...userRules, trimmed]);
+    setNewRule('');
+    ruleInputRef.current?.focus();
+  }
+
+  function removeRule(idx: number) {
+    onRulesChange(userRules.filter((_, i) => i !== idx));
+  }
+
   function handleSave() {
     const settingsToSave = {
       cliPath,
       defaultPath,
       constraints: JSON.stringify(constraints),
+      userRules: JSON.stringify(userRules),
     };
     api.saveSettings(settingsToSave)
       .then(() => {
@@ -316,6 +328,93 @@ export function Settings({ tasks, onImport, onResetPatterns }: Props) {
           <CheckboxRow label="Mock-first for external data sources" checked={constraints.mockFirst} onChange={v => setConstraints(c => ({ ...c, mockFirst: v }))} />
           <CheckboxRow label="TypeScript strict mode, Zod at all boundaries" checked={constraints.tsStrict} onChange={v => setConstraints(c => ({ ...c, tsStrict: v }))} />
           <CheckboxRow label="Small commits per step" checked={constraints.smallCommits} onChange={v => setConstraints(c => ({ ...c, smallCommits: v }))} />
+        </SectionCard>
+
+        {/* Personal Rules */}
+        <SectionCard
+          title="Personal Rules"
+          subtitle="Injected into every generated prompt's Constraints section. Applied on top of any project CLAUDE.md."
+        >
+          {/* Existing rules */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: userRules.length ? '12px' : '0' }}>
+            {userRules.map((rule, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 10px',
+                  background: '#0a0a0d',
+                  border: '1px solid #1c1c22',
+                  borderRadius: '7px',
+                }}
+              >
+                <span style={{ flex: 1, fontSize: '12px', fontFamily: '"JetBrains Mono", monospace', color: '#d4d4d8' }}>
+                  {rule}
+                </span>
+                <button
+                  onClick={() => removeRule(i)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#52525b', padding: '2px', display: 'flex', alignItems: 'center' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#52525b')}
+                  title="Remove rule"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Add new rule */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              ref={ruleInputRef}
+              value={newRule}
+              onChange={e => setNewRule(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addRule(); }}
+              placeholder='e.g. "always use Vitest not Jest" or "prefer functional components"'
+              style={{
+                flex: 1,
+                background: '#18181b',
+                border: '1px solid #1c1c22',
+                borderRadius: '7px',
+                padding: '7px 10px',
+                color: '#fafafa',
+                fontSize: '12px',
+                fontFamily: '"JetBrains Mono", monospace',
+              }}
+              onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+              onBlur={e => (e.target.style.borderColor = '#1c1c22')}
+            />
+            <button
+              onClick={addRule}
+              disabled={!newRule.trim()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '7px 12px',
+                borderRadius: '7px',
+                border: '1px solid #1c1c22',
+                background: newRule.trim() ? '#18181b' : '#0f0f12',
+                color: newRule.trim() ? '#a1a1aa' : '#3c3c48',
+                fontSize: '12px',
+                cursor: newRule.trim() ? 'pointer' : 'not-allowed',
+                fontFamily: fonts.sans,
+                transition: 'all 0.12s',
+              }}
+            >
+              <Plus size={13} />
+              Add
+            </button>
+          </div>
+
+          {userRules.length === 0 && (
+            <p style={{ margin: '10px 0 0', fontSize: '11px', color: '#52525b', fontFamily: fonts.mono }}>
+              No personal rules yet — add rules above to inject them into every generated prompt.
+            </p>
+          )}
         </SectionCard>
 
         {/* Data Management */}

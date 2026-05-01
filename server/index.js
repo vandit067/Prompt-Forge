@@ -396,7 +396,7 @@ function extractJSON(text) {
 // POST /api/generate — route to active backend with script fallback
 app.post('/api/generate', async (req, res) => {
 
-  const { input, projectPath, projectContext } = req.body;
+  const { input, projectPath, projectContext, userRules } = req.body;
   let { taskType } = req.body;
 
   if (!input?.trim()) {
@@ -469,6 +469,10 @@ app.post('/api/generate', async (req, res) => {
     }
   }
 
+  const userRulesBlock = Array.isArray(userRules) && userRules.length
+    ? `\nPERSONAL RULES (treat as additional hard constraints in every session's Constraints section):\n${userRules.map(r => `- ${r}`).join('\n')}`
+    : '';
+
   const userMessage = [
     `TASK_TYPE: ${taskType || 'NEW_FEATURE'}`,
     parsed_input.type !== 'plain' ? `INPUT_TYPE: ${parsed_input.type}` : null,
@@ -476,6 +480,7 @@ app.post('/api/generate', async (req, res) => {
     projectPath ? `PROJECT_PATH: ${projectPath}` : null,
     contextBlock || null,
     knownIssuesBlock || null,
+    userRulesBlock || null,
   ].filter(Boolean).join('\n');
 
   // Route to active backend; always fall back to script on failure
@@ -486,12 +491,12 @@ app.post('/api/generate', async (req, res) => {
     } else if (activeBackend.backend === 'ollama') {
       parsed = await generateViaOllama(userMessage);
     } else {
-      parsed = generateFromScript(enrichedInput, taskType || 'NEW_FEATURE', projectContext);
+      parsed = generateFromScript(enrichedInput, taskType || 'NEW_FEATURE', projectContext, userRules);
     }
   } catch (err) {
     console.warn(`[backend] ${activeBackend.backend} failed (${err.message}) — falling back to script`);
     try {
-      parsed = generateFromScript(enrichedInput, taskType || 'NEW_FEATURE', projectContext);
+      parsed = generateFromScript(enrichedInput, taskType || 'NEW_FEATURE', projectContext, userRules);
     } catch (scriptErr) {
       return res.status(500).json({ error: err.message || 'Generation failed' });
     }

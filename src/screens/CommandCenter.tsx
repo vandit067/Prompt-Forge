@@ -5,6 +5,106 @@ import { CopyButton } from '../components/CopyButton';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import type { Task, OutputTab, ProjectMode, ScannedContext, ActiveBackend } from '../types';
 
+/* ─── Prompt Quality Scorer ─── */
+interface QualityScore {
+  pct: number;
+  grade: 'A' | 'B' | 'C' | 'D';
+  color: string;
+  breakdown: Array<{ label: string; pass: boolean; pts: number; max: number }>;
+}
+
+function scorePrompt(content: string, isLast: boolean): QualityScore {
+  const checks = [
+    { label: 'Context line',     max: 12, pass: /^Context:/m.test(content) },
+    { label: 'Scope + ONLY',     max: 10, pass: /^Scope: ONLY/m.test(content) },
+    { label: '3+ steps',         max: 15, pass: (content.match(/^\d+\./gm) || []).length >= 3 },
+    { label: 'Abort condition',  max: 10, pass: /STOP and report/i.test(content) },
+    { label: 'Verification',     max: 10, pass: /^Verification:/m.test(content) },
+    { label: 'Runnable command', max:  8, pass: /\b(curl|npm run|npx|pytest|go test|cargo test|mvn)\b/.test(content) },
+    { label: 'Constraints ≥2',  max:  8, pass: (content.match(/^- .+/gm) || []).length >= 2 },
+    { label: 'File paths',       max: 12, pass: /src\/[\w/.-]+\.(ts|tsx|js|py|go)/.test(content) },
+    ...(!isLast ? [{ label: 'Handoff note', max: 15, pass: /HANDOFF NOTE/.test(content) }] : []),
+  ];
+
+  const totalMax = checks.reduce((s, c) => s + c.max, 0);
+  const earned   = checks.filter(c => c.pass).reduce((s, c) => s + c.max, 0);
+  const pct      = Math.round((earned / totalMax) * 100);
+  const grade    = (pct >= 90 ? 'A' : pct >= 70 ? 'B' : pct >= 50 ? 'C' : 'D') as QualityScore['grade'];
+  const color    = pct >= 90 ? '#22c55e' : pct >= 70 ? '#3b82f6' : pct >= 50 ? '#f59e0b' : '#ef4444';
+  const breakdown = checks.map(c => ({ label: c.label, pass: c.pass, pts: c.pass ? c.max : 0, max: c.max }));
+
+  return { pct, grade, color, breakdown };
+}
+
+function QualityBadge({ score }: { score: QualityScore }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={`Prompt quality: ${score.pct}% — click to see breakdown`}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '2px 7px',
+          borderRadius: '5px',
+          border: `1px solid ${score.color}33`,
+          background: `${score.color}18`,
+          color: score.color,
+          fontSize: '10px',
+          fontFamily: '"JetBrains Mono", monospace',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        {score.grade}
+        <span style={{ fontWeight: 400, opacity: 0.8 }}>{score.pct}%</span>
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            marginTop: '6px',
+            background: '#0f0f12',
+            border: '1px solid #27272a',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            zIndex: 10,
+            minWidth: '200px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          }}
+        >
+          <div style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', marginBottom: '8px', letterSpacing: '0.06em' }}>
+            QUALITY BREAKDOWN
+          </div>
+          {score.breakdown.map(item => (
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '5px' }}>
+              <span style={{ color: item.pass ? '#22c55e' : '#52525b', fontSize: '11px', width: '12px', flexShrink: 0 }}>
+                {item.pass ? '✓' : '✗'}
+              </span>
+              <span style={{ flex: 1, fontSize: '11px', color: item.pass ? '#a1a1aa' : '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+                {item.label}
+              </span>
+              <span style={{ fontSize: '10px', color: item.pass ? '#3b82f6' : '#3c3c48', fontFamily: '"JetBrains Mono", monospace' }}>
+                +{item.pts}/{item.max}
+              </span>
+            </div>
+          ))}
+          <div style={{ borderTop: '1px solid #1c1c22', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>Total</span>
+            <span style={{ fontSize: '11px', color: score.color, fontFamily: '"JetBrains Mono", monospace', fontWeight: 700 }}>{score.pct}%</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Shared Output Panel ─── */
 interface OutputPanelProps {
   task: Task;
@@ -13,6 +113,17 @@ interface OutputPanelProps {
 
 function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>(defaultTab);
+  const [copiedAll, setCopiedAll] = useState(false);
+
+  function handleCopyAll() {
+    const all = task.generatedPrompts
+      .map((p, i) => `${'─'.repeat(60)}\n${p.sessionLabel}\n${'─'.repeat(60)}\n${p.content}`)
+      .join('\n\n');
+    navigator.clipboard.writeText(all).then(() => {
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 2000);
+    });
+  }
 
   const TABS: { id: OutputTab; label: string; icon: React.ReactNode; count: number }[] = [
     { id: 'prompts',   label: 'Prompts',   icon: <Zap size={13} />,        count: task.generatedPrompts.length },
@@ -34,61 +145,91 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
       <div
         style={{
           display: 'flex',
+          alignItems: 'center',
           borderBottom: `1px solid ${colors.border}`,
           background: colors.bgMuted,
           padding: `0 ${space.xs}`,
         }}
       >
-        {TABS.map(tab => (
+        <div style={{ display: 'flex', flex: 1 }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: space.sm,
+                padding: `11px ${space.md}`,
+                border: 'none',
+                borderBottom: activeTab === tab.id ? `2px solid ${colors.blue}` : '2px solid transparent',
+                background: 'transparent',
+                color: activeTab === tab.id ? colors.fg : colors.fgMuted,
+                fontSize: '12px',
+                fontFamily: fonts.sans,
+                fontWeight: activeTab === tab.id ? 500 : 400,
+                cursor: 'pointer',
+                transition: `color ${transitions.fast}`,
+                marginBottom: '-1px',
+              }}
+              onMouseEnter={e => {
+                if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
+              }}
+              onMouseLeave={e => {
+                if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgMuted;
+              }}
+            >
+              {tab.icon}
+              {tab.label}
+              <span
+                style={{
+                  padding: '1px 5px',
+                  borderRadius: radius.sm,
+                  background: activeTab === tab.id ? colors.blueBg : colors.bgInput,
+                  color: activeTab === tab.id ? colors.blueLight : colors.fgDim,
+                  fontSize: '10px',
+                  fontFamily: fonts.mono,
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+        {/* Copy all — only shown on prompts tab with multiple sessions */}
+        {activeTab === 'prompts' && task.generatedPrompts.length > 1 && (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={handleCopyAll}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: space.sm,
-              padding: `11px ${space.md}`,
-              border: 'none',
-              borderBottom: activeTab === tab.id ? `2px solid ${colors.blue}` : '2px solid transparent',
-              background: 'transparent',
-              color: activeTab === tab.id ? colors.fg : colors.fgMuted,
-              fontSize: '12px',
-              fontFamily: fonts.sans,
-              fontWeight: activeTab === tab.id ? 500 : 400,
+              gap: '5px',
+              padding: '5px 10px',
+              marginRight: '8px',
+              borderRadius: '5px',
+              border: `1px solid ${copiedAll ? '#14532d' : '#27272a'}`,
+              background: copiedAll ? '#0d1f0d' : 'transparent',
+              color: copiedAll ? '#22c55e' : '#71717a',
+              fontSize: '10px',
+              fontFamily: '"JetBrains Mono", monospace',
               cursor: 'pointer',
-              transition: `color ${transitions.fast}`,
-              marginBottom: '-1px',
-            }}
-            onMouseEnter={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
-            }}
-            onMouseLeave={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgMuted;
+              transition: 'all 0.12s',
+              whiteSpace: 'nowrap',
             }}
           >
-            {tab.icon}
-            {tab.label}
-            <span
-              style={{
-                padding: '1px 5px',
-                borderRadius: radius.sm,
-                background: activeTab === tab.id ? colors.blueBg : colors.bgInput,
-                color: activeTab === tab.id ? colors.blueLight : colors.fgDim,
-                fontSize: '10px',
-                fontFamily: fonts.mono,
-              }}
-            >
-              {tab.count}
-            </span>
+            {copiedAll ? '✓ Copied' : `Copy all ${task.generatedPrompts.length}`}
           </button>
-        ))}
+        )}
       </div>
 
       {/* Tab content */}
       <div style={{ padding: space.lg }}>
         {activeTab === 'prompts' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
-            {task.generatedPrompts.map((prompt) => (
+            {task.generatedPrompts.map((prompt, idx) => {
+              const isLast = idx === task.generatedPrompts.length - 1;
+              const score = scorePrompt(prompt.content, isLast);
+              return (
               <div
                 key={prompt.id}
                 style={{
@@ -119,7 +260,10 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
                   >
                     {prompt.sessionLabel}
                   </span>
-                  <CopyButton text={prompt.content} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <QualityBadge score={score} />
+                    <CopyButton text={prompt.content} />
+                  </div>
                 </div>
                 {/* Prompt body */}
                 <pre
@@ -138,7 +282,8 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
                   {prompt.content}
                 </pre>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

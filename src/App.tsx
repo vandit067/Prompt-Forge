@@ -22,6 +22,7 @@ export default function App() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [knownIssuesCount, setKnownIssuesCount] = useState(0);
   const [activeBackend, setActiveBackend] = useState<ActiveBackend | null>(null);
+  const [userRules, setUserRules] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -30,6 +31,9 @@ export default function App() {
       .catch(() => setDbReady(true));
     api.getBackend()
       .then(setActiveBackend)
+      .catch(() => {});
+    api.getSettings()
+      .then(s => { if (s.userRules) try { setUserRules(JSON.parse(s.userRules)); } catch {} })
       .catch(() => {});
   }, []);
 
@@ -74,7 +78,7 @@ export default function App() {
       const { count } = await getFailureCount(taskType);
       setKnownIssuesCount(count);
 
-      const newTask = await api.generate(input, taskType, projectPath, scannedContext);
+      const newTask = await api.generate(input, taskType, projectPath, scannedContext, userRules);
       setTasks(prev => [newTask, ...prev]);
       setLiveTask(newTask);
       setSelectedTaskId(newTask.id);
@@ -150,6 +154,8 @@ export default function App() {
             tasks={tasks}
             onImport={handleImport}
             onResetPatterns={handleResetPatterns}
+            userRules={userRules}
+            onRulesChange={setUserRules}
           />
         );
 

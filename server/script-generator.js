@@ -691,7 +691,7 @@ function scaffoldSession(input, features, stack) {
   };
 }
 
-function featureSession(feature, idx, totalSessions, stack, allFeatures) {
+function featureSession(feature, idx, totalSessions, stack, allFeatures, userRules = []) {
   const pm = stack.packageMgr;
   const steps = [...feature.steps];
 
@@ -701,6 +701,7 @@ function featureSession(feature, idx, totalSessions, stack, allFeatures) {
   const constraints = [
     'TypeScript strict — no `any`, no non-null assertions',
     `Run \`${stack.typecheckCmd}\` after every file change`,
+    ...userRules,
   ];
 
   // Add CLAUDE.md rules if available
@@ -931,7 +932,7 @@ function buildTitle(input) {
 
 // ── Simple task generators (BUG_FIX, CODE_REVIEW, etc.) ──────────────────────
 
-function buildSimpleTask(input, taskType, projectContext) {
+function buildSimpleTask(input, taskType, projectContext, userRules = []) {
   const stack = advisedStack(projectContext, input);
   const pm = stack.packageMgr;
   const tc = stack.typecheckCmd;
@@ -1090,6 +1091,7 @@ function buildSimpleTask(input, taskType, projectContext) {
     if (projectContext?.rules?.length) {
       projectContext.rules.slice(0, 4).forEach(r => lines.push(`- ${r}`));
     }
+    userRules.forEach(r => lines.push(`- ${r}`));
     lines.push('Verification:');
     (template.checklist || [`${tc} → 0 errors`]).forEach(c => lines.push(`- ${c}`));
     if (!isLast) {
@@ -1120,13 +1122,13 @@ function buildSimpleTask(input, taskType, projectContext) {
 
 // ── Main entry point ──────────────────────────────────────────────────────────
 
-export function generateFromScript(input, taskType, projectContext) {
+export function generateFromScript(input, taskType, projectContext, userRules = []) {
   // For non-NEW_TOOL tasks or very short inputs, use the concise simple generator
   const isComplex = taskType === 'NEW_TOOL' || taskType === 'DATA_INTEGRATION';
   const features = isComplex ? extractFeatures(input) : [];
 
   if (!isComplex || features.length < 2) {
-    return buildSimpleTask(input, taskType || 'NEW_FEATURE', projectContext);
+    return buildSimpleTask(input, taskType || 'NEW_FEATURE', projectContext, userRules);
   }
 
   // ── Advanced multi-session planning for complex NEW_TOOL tasks ──
@@ -1143,7 +1145,7 @@ export function generateFromScript(input, taskType, projectContext) {
 
   // Build sessions: scaffold first, then one session per feature group
   const featureSessions = finalFeatures.map((feature, i) =>
-    featureSession(feature, i + 1, finalFeatures.length + 1, stack, finalFeatures)
+    featureSession(feature, i + 1, finalFeatures.length + 1, stack, finalFeatures, userRules)
   );
 
   const scaffold = scaffoldSession(input, finalFeatures, stack);

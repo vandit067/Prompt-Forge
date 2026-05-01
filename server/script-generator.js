@@ -1,18 +1,388 @@
-// Deterministic template-based generator — runs without any AI backend.
-// Produces the same JSON schema as the Anthropic / Ollama paths.
+/**
+ * Advanced template-based generator — produces Claude/Copilot quality prompts
+ * without any API calls. Uses a feature registry with real package names,
+ * file paths, API routes, DB schemas, and env vars per detected feature.
+ */
 
-const SESSION_COUNTS = {
-  NEW_TOOL:            2,
-  NEW_FEATURE:         1,
-  BUG_FIX:             1,
-  CODE_REVIEW:         1,
-  REFACTOR:            2,
-  DEBUG_INVESTIGATION: 1,
-  DESIGN_DECISION:     1,
-  PERF_OPTIMIZATION:   2,
-  DATA_INTEGRATION:    2,
-  DOC_OR_SPEC:         1,
+// ── Feature Registry ──────────────────────────────────────────────────────────
+// Ordered by session priority (infrastructure first, UI last)
+
+const FEATURE_REGISTRY = [
+  {
+    id: 'auth',
+    detect: /\b(auth|login|sign.?in|sign.?up|jwt|session|oauth|sso|password)\b/i,
+    label: 'Authentication',
+    group: 'infrastructure',
+    priority: 10,
+    packages: ['next-auth@5', '@auth/prisma-adapter'],
+    envVars: ['NEXTAUTH_SECRET', 'NEXTAUTH_URL', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET'],
+    routes: ['GET|POST /api/auth/[...nextauth]'],
+    steps: [
+      'npm install next-auth @auth/prisma-adapter',
+      'Add Account, Session, VerificationToken models to prisma/schema.prisma (NextAuth standard schema)',
+      'Create src/app/api/auth/[...nextauth]/route.ts — NextAuth with PrismaAdapter + Google OAuth provider',
+      'Create src/lib/auth.ts — export auth(), signIn(), signOut() helpers',
+      'Create src/middleware.ts — protect /dashboard, /settings, /docs behind auth check',
+      'Verify: unauthenticated GET /dashboard → 302 redirect to /api/auth/signin',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'database',
+    detect: /\b(database|db|postgres|postgresql|sqlite|mysql|mongodb|prisma|drizzle|store.*db|db.*store)\b/i,
+    label: 'Database & ORM Setup',
+    group: 'infrastructure',
+    priority: 11,
+    packages: ['@prisma/client', 'prisma'],
+    envVars: ['DATABASE_URL'],
+    steps: [
+      'npm install @prisma/client && npm install -D prisma',
+      'npx prisma init — creates prisma/schema.prisma with DATABASE_URL in .env',
+      'Define base models: User, Studio, AuditLog in prisma/schema.prisma',
+      'npx prisma migrate dev --name init',
+      'Create src/lib/db.ts — PrismaClient singleton with global caching for dev hot-reload',
+      'Verify: npx prisma studio → tables visible; npx prisma db push → no drift',
+    ],
+    time: '1–2 hours',
+  },
+  {
+    id: 'bugsnag',
+    detect: /\b(bugsnag|crash.report|error.track|stability)\b/i,
+    label: 'Bugsnag Integration',
+    group: 'integration',
+    priority: 20,
+    packages: ['@bugsnag/js', '@bugsnag/plugin-react'],
+    envVars: ['BUGSNAG_API_KEY', 'BUGSNAG_PROJECT_API_KEY'],
+    routes: ['GET /api/stability/bugsnag → { errorGroups, crashRate, stabilityScore, trend }'],
+    steps: [
+      'npm install @bugsnag/js @bugsnag/plugin-react',
+      'Create src/lib/bugsnag.ts — BugsnagClient singleton using BUGSNAG_API_KEY, export notifyError()',
+      'Create src/services/bugsnag.ts — fetchErrorGroups(), fetchCrashRate(), fetchStabilityScore() using Bugsnag Data API',
+      'Create src/app/api/stability/bugsnag/route.ts — GET handler, validate response with Zod, cache 5 min with next: { revalidate: 300 }',
+      'Define BugsnagResponse Zod schema: { errorGroups: z.array(...), crashRate: z.number(), stabilityScore: z.number() }',
+      'Verify: curl http://localhost:3000/api/stability/bugsnag → { crashRate: number, stabilityScore: number }',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'google-play',
+    detect: /\b(google.?play|play.?store|android.*(metric|stat|crash|rating))\b/i,
+    label: 'Google Play Integration',
+    group: 'integration',
+    priority: 21,
+    packages: ['googleapis'],
+    envVars: ['GOOGLE_SERVICE_ACCOUNT_JSON', 'GOOGLE_PLAY_PACKAGE_NAME'],
+    routes: ['GET /api/stability/play → { rating, installs, crashRate, anrRate, reviewScore }'],
+    steps: [
+      'npm install googleapis',
+      'Create GCP service account with androidpublisher scope — base64-encode JSON key into GOOGLE_SERVICE_ACCOUNT_JSON',
+      'Create src/lib/google-play.ts — authenticate JWT from GOOGLE_SERVICE_ACCOUNT_JSON, export androidpublisher client',
+      'Create src/services/play.ts — fetchAppStats(), fetchCrashRate(), fetchAnrRate(), fetchRating(), fetchReviews()',
+      'Create src/app/api/stability/play/route.ts — GET with next: { revalidate: 300 }, transform to unified StabilityMetric shape',
+      'Verify: curl http://localhost:3000/api/stability/play → { rating: number, crashes: number, anrRate: number }',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'app-store',
+    detect: /\b(app.?store|ios.*(metric|stat|crash)|apple.*dashboard)\b/i,
+    label: 'App Store Connect Integration',
+    group: 'integration',
+    priority: 22,
+    packages: ['app-store-connect-api'],
+    envVars: ['ASC_KEY_ID', 'ASC_ISSUER_ID', 'ASC_PRIVATE_KEY', 'ASC_APP_ID'],
+    routes: ['GET /api/stability/appstore → { rating, crashes, installations, reviews }'],
+    steps: [
+      'npm install app-store-connect-api',
+      'Generate App Store Connect API key — store ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY in .env',
+      'Create src/lib/app-store.ts — JWT auth with ES256, export ascClient()',
+      'Create src/services/app-store.ts — fetchCrashInsights(), fetchRatings(), fetchInstalls()',
+      'Create src/app/api/stability/appstore/route.ts — GET with 5-min revalidate',
+      'Verify: curl http://localhost:3000/api/stability/appstore → { rating, crashes, installations }',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'sentry',
+    detect: /\b(sentry|error.monitoring)\b/i,
+    label: 'Sentry Integration',
+    group: 'integration',
+    priority: 23,
+    packages: ['@sentry/nextjs'],
+    envVars: ['SENTRY_DSN', 'SENTRY_AUTH_TOKEN', 'SENTRY_ORG', 'SENTRY_PROJECT'],
+    routes: ['GET /api/stability/sentry → { issues, errorRate, crashFreeRate }'],
+    steps: [
+      'npm install @sentry/nextjs && npx @sentry/wizard@latest -i nextjs',
+      'Create src/services/sentry.ts — fetchIssues(), fetchErrorRate(), fetchCrashFreeRate() using Sentry API v0',
+      'Create src/app/api/stability/sentry/route.ts — GET with Zod validation and caching',
+      'Verify: curl http://localhost:3000/api/stability/sentry → { crashFreeRate: number }',
+    ],
+    time: '1–2 hours',
+  },
+  {
+    id: 'datadog',
+    detect: /\b(datadog|data.?dog|dd.?agent)\b/i,
+    label: 'Datadog Integration',
+    group: 'integration',
+    priority: 24,
+    packages: ['@datadog/datadog-api-client'],
+    envVars: ['DD_API_KEY', 'DD_APP_KEY', 'DD_SITE'],
+    routes: ['GET /api/metrics/datadog → { p99Latency, errorRate, requestCount }'],
+    steps: [
+      'npm install @datadog/datadog-api-client',
+      'Create src/lib/datadog.ts — configure client with DD_API_KEY + DD_APP_KEY',
+      'Create src/services/datadog.ts — fetchMetrics(), fetchAlerts(), fetchDashboards()',
+      'Create src/app/api/metrics/datadog/route.ts — GET with query time range param',
+      'Verify: curl "http://localhost:3000/api/metrics/datadog?range=1h" → metrics object',
+    ],
+    time: '1–2 hours',
+  },
+  {
+    id: 'remote-config',
+    detect: /\b(remote.?config|feature.?flag|feature.?toggle|config.?panel|ab.?test|a\/b.?test|experiment)\b/i,
+    label: 'Remote Config',
+    group: 'data',
+    priority: 30,
+    packages: [],
+    envVars: [],
+    dbSchema: [
+      'model RemoteConfig {',
+      '  id          String   @id @default(cuid())',
+      '  key         String   @unique',
+      '  value       Json',
+      '  valueType   String   // "boolean" | "string" | "number" | "json"',
+      '  description String?',
+      '  enabled     Boolean  @default(true)',
+      '  environment String   @default("production") // "production" | "staging" | "development"',
+      '  updatedBy   String',
+      '  updatedAt   DateTime @updatedAt',
+      '  createdAt   DateTime @default(now())',
+      '}',
+    ],
+    routes: [
+      'GET    /api/remote-config            → list all configs',
+      'POST   /api/remote-config            → create config',
+      'PATCH  /api/remote-config/[key]      → update value or toggle enabled',
+      'DELETE /api/remote-config/[key]      → remove config',
+      'POST   /api/remote-config/[key]/test → simulate fetch as client',
+    ],
+    steps: [
+      'Add RemoteConfig model to prisma/schema.prisma (key, value Json, valueType, enabled, environment, updatedBy)',
+      'npx prisma migrate dev --name add-remote-config',
+      'Create src/app/api/remote-config/route.ts — GET list + POST create; Zod schema: { key: z.string(), value: z.unknown(), valueType: z.enum([...]) }',
+      'Create src/app/api/remote-config/[key]/route.ts — PATCH (partial update) + DELETE with audit log write',
+      'Create src/app/api/remote-config/[key]/test/route.ts — POST returns value as client SDK would return it',
+      'Create src/components/remote-config/ConfigTable.tsx — inline edit cells, enabled toggle, Test button that shows modal with simulated response',
+      'Verify: POST /api/remote-config { key: "ff_new_ui", value: true, valueType: "boolean" } → 201 with cuid id',
+    ],
+    time: '3–4 hours',
+  },
+  {
+    id: 'slack-bot',
+    detect: /\b(slack.?bot|slack|slash.?command|bot.*pull|bot.*fetch)\b/i,
+    label: 'Slack Bot',
+    group: 'integration',
+    priority: 40,
+    packages: ['@slack/bolt', '@slack/web-api'],
+    envVars: ['SLACK_BOT_TOKEN', 'SLACK_SIGNING_SECRET', 'SLACK_APP_TOKEN'],
+    slashCommands: ['/stability', '/config', '/status', '/alerts'],
+    routes: ['POST /api/slack/events', 'POST /api/slack/commands'],
+    steps: [
+      'Create Slack app at api.slack.com — enable Socket Mode, Bot Token Scopes: chat:write, commands; add slash commands: /stability, /config, /status, /alerts',
+      'npm install @slack/bolt @slack/web-api',
+      'Create src/bot/app.ts — App instance with SLACK_BOT_TOKEN + SLACK_SIGNING_SECRET; start() in Socket Mode',
+      'Create src/bot/commands/stability.ts — /stability fetches GET /api/stability/bugsnag + /api/stability/play, returns Block Kit card with crash rate + stability score',
+      'Create src/bot/commands/config.ts — /config <key> fetches remote config by key, /config list returns paginated table',
+      'Create src/bot/commands/status.ts — /status returns overall health summary: green/yellow/red per integration',
+      'Create src/app/api/slack/events/route.ts — POST webhook with SLACK_SIGNING_SECRET verification',
+      'Verify: /stability in Slack → Block Kit card with { crashRate, stabilityScore } from live API',
+    ],
+    time: '3–4 hours',
+  },
+  {
+    id: 'discord-bot',
+    detect: /\b(discord.?bot|discord)\b/i,
+    label: 'Discord Bot',
+    group: 'integration',
+    priority: 41,
+    packages: ['discord.js'],
+    envVars: ['DISCORD_BOT_TOKEN', 'DISCORD_GUILD_ID', 'DISCORD_CLIENT_ID'],
+    steps: [
+      'npm install discord.js',
+      'Create Discord application at discord.com/developers — enable bot, copy token into DISCORD_BOT_TOKEN',
+      'Create src/bot/discord.ts — Client with GatewayIntentBits.Guilds + GuildMessages',
+      'Register slash commands: /stability, /config, /status using REST API',
+      'Implement interactionCreate handler — route to command handlers',
+      'Verify: /stability in Discord → embed with crash rate + stability score',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'charts',
+    detect: /\b(chart|graph|visual|metric|analytic|dashboard.*graph|graph.*dashboard|recharts|chart\.?js|d3)\b/i,
+    label: 'Charts & Metrics Dashboard',
+    group: 'ui',
+    priority: 50,
+    packages: ['recharts'],
+    envVars: [],
+    steps: [
+      'npm install recharts',
+      'Create src/components/charts/StabilityTrendChart.tsx — ResponsiveContainer + LineChart of crash rate over 30 days; data from GET /api/stability/bugsnag?range=30d',
+      'Create src/components/charts/ErrorGroupsChart.tsx — BarChart of top 10 error groups by occurrence count',
+      'Create src/components/charts/PlayStoreChart.tsx — ComposedChart of daily installs (Bar) + crash rate (Line)',
+      'Create src/components/charts/MetricsGrid.tsx — 4-card stat grid: stability score, crash rate, ANR rate, store rating; each card has trend arrow',
+      'Create src/app/dashboard/page.tsx — async server component; fetches all stability APIs in parallel with Promise.all; assembles MetricsGrid + charts in responsive grid',
+      'Verify: /dashboard loads without hydration errors; Recharts renders in client component boundary with "use client"',
+    ],
+    time: '3–4 hours',
+  },
+  {
+    id: 'themes',
+    detect: /\b(theme|arctic|amber|obsidian|dark.?mode|light.?mode|colour|color.?scheme|palette)\b/i,
+    label: 'Theme System',
+    group: 'ui',
+    priority: 51,
+    packages: [],
+    envVars: [],
+    themeNames: ['arctic', 'amber', 'obsidian', 'slate', 'rose', 'forest'],
+    steps: [
+      'Define 12 CSS variable sets in src/styles/themes.css — one block per theme×mode combination: arctic-light, arctic-dark, amber-light, amber-dark, obsidian-light, obsidian-dark, slate-light, slate-dark, rose-light, rose-dark, forest-light, forest-dark',
+      'Each block sets: --bg, --bg-card, --bg-input, --border, --fg, --fg-muted, --accent, --accent-bg, --success, --error',
+      'Create src/lib/theme.ts — ThemeId = "arctic-light" | "arctic-dark" | ...; THEMES: Record<ThemeId, { label, mode }>; getSystemTheme(): ThemeId',
+      'Create src/components/ThemeProvider.tsx — "use client"; reads localStorage "theme", applies data-theme attr to <html>; exposes useTheme() context with setTheme()',
+      'Create src/components/ThemeSelector.tsx — 12-swatch grid; each swatch shows theme accent colour, label; click calls setTheme() + localStorage.setItem()',
+      'Add ThemeProvider to src/app/layout.tsx; add suppressHydrationWarning to <html> to prevent flash',
+      'Verify: select obsidian-dark → --bg is dark; refresh → theme persists from localStorage',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'settings',
+    detect: /\b(settings?|studio|user.?info|user.?manage|role|permission|configuration.?panel|api.?key)\b/i,
+    label: 'Settings',
+    group: 'ui',
+    priority: 60,
+    packages: [],
+    envVars: [],
+    dbSchema: [
+      'model Studio {',
+      '  id        String   @id @default(cuid())',
+      '  name      String',
+      '  slug      String   @unique',
+      '  logoUrl   String?',
+      '  members   User[]',
+      '  createdAt DateTime @default(now())',
+      '}',
+      '',
+      'enum Role { ADMIN EDITOR VIEWER }',
+    ],
+    routes: [
+      'GET    /api/settings/studios        → list studios',
+      'POST   /api/settings/studios        → create studio',
+      'PATCH  /api/settings/studios/[id]   → update studio',
+      'GET    /api/settings/users          → list users with studio filter',
+      'PATCH  /api/settings/users/[id]     → update role or studio',
+    ],
+    steps: [
+      'Add Studio model and Role enum to prisma/schema.prisma; add studioId + role to User model',
+      'npx prisma migrate dev --name add-studios-roles',
+      'Create src/app/api/settings/studios/route.ts — GET (list) + POST (create); require ADMIN role via auth check',
+      'Create src/app/api/settings/users/route.ts — GET with ?studioId filter; PATCH role/studio with Zod validation',
+      'Create src/app/settings/layout.tsx — tab navigation: Studios | Users | API Keys | Integrations',
+      'Create src/app/settings/studios/page.tsx — StudioCard grid with edit modal',
+      'Create src/app/settings/users/page.tsx — UserTable with role badge, studio dropdown, inline role change',
+      'Verify: PATCH /api/settings/users/[id] { role: "EDITOR" } → 200; user row updates role badge without reload',
+    ],
+    time: '3–4 hours',
+  },
+  {
+    id: 'docs',
+    detect: /\b(docs?|documentation|wiki|guide|knowledge.?base|mdx|markdown)\b/i,
+    label: 'Docs Section',
+    group: 'ui',
+    priority: 61,
+    packages: ['next-mdx-remote', 'gray-matter', 'shiki'],
+    envVars: [],
+    steps: [
+      'npm install next-mdx-remote gray-matter shiki',
+      'Create docs/ directory with MDX files: getting-started.mdx, remote-config.mdx, slack-bot.mdx, themes.mdx, api-reference.mdx — each with frontmatter: title, description, order',
+      'Create src/lib/docs.ts — getAllDocs() reads docs/*.mdx, parses frontmatter with gray-matter, sorts by order; getDoc(slug) returns content + meta',
+      'Create src/app/docs/layout.tsx — sticky sidebar with doc links grouped by section; active link highlight',
+      'Create src/app/docs/[slug]/page.tsx — renderRemote(content) with MDX components; syntax highlighting via shiki',
+      'Create src/components/docs/DocSearch.tsx — client-side fuzzy search over doc titles + descriptions',
+      'Verify: /docs/getting-started renders MDX with <h1> from frontmatter title; code blocks are syntax-highlighted',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'notifications',
+    detect: /\b(notification|alert|webhook|email|pagerduty|opsgenie)\b/i,
+    label: 'Alerts & Notifications',
+    group: 'integration',
+    priority: 42,
+    packages: ['nodemailer', '@sendgrid/mail'],
+    envVars: ['SENDGRID_API_KEY', 'ALERT_EMAIL_FROM', 'WEBHOOK_SECRET'],
+    routes: ['POST /api/alerts/webhook', 'GET /api/alerts', 'POST /api/alerts/[id]/acknowledge'],
+    steps: [
+      'npm install @sendgrid/mail',
+      'Create src/services/notifications.ts — sendEmail() via SendGrid, sendSlackAlert() via incoming webhook',
+      'Create src/app/api/alerts/webhook/route.ts — POST; verify HMAC signature using WEBHOOK_SECRET; parse alert payload; persist to DB + trigger notification',
+      'Create src/app/api/alerts/route.ts — GET list with ?status=active|acknowledged filter',
+      'Create src/components/alerts/AlertFeed.tsx — real-time feed using SWR with 30s poll interval',
+      'Verify: POST /api/alerts/webhook with valid HMAC → 200; alert appears in GET /api/alerts',
+    ],
+    time: '2–3 hours',
+  },
+  {
+    id: 'caching',
+    detect: /\b(redis|cache|memcached)\b/i,
+    label: 'Redis Caching',
+    group: 'infrastructure',
+    priority: 12,
+    packages: ['ioredis'],
+    envVars: ['REDIS_URL'],
+    steps: [
+      'npm install ioredis',
+      'Create src/lib/redis.ts — IORedis singleton with REDIS_URL; export get(), set(), del() helpers with JSON serialisation',
+      'Wrap all external API calls (Bugsnag, Google Play) in cache: check Redis first, fetch + set 5-min TTL on miss',
+      'Verify: first call takes ~500ms; second call within TTL takes <10ms from Redis',
+    ],
+    time: '1–2 hours',
+  },
+];
+
+// ── Stack Profiles ────────────────────────────────────────────────────────────
+
+const STACK_PROFILES = {
+  nextjs: {
+    label: 'Next.js App Router + TypeScript + Tailwind CSS + Prisma + PostgreSQL',
+    core: ['Next.js 14', 'React 18', 'TypeScript'],
+    styling: ['Tailwind CSS'],
+    db: ['PostgreSQL', 'Prisma ORM'],
+    packageMgr: 'npm',
+    scaffold: 'npx create-next-app@latest . --typescript --tailwind --app --src-dir --import-alias "@/*"',
+    devCmd: 'npm run dev',
+    buildCmd: 'npm run build',
+    typecheckCmd: 'npx tsc --noEmit',
+    lintCmd: 'npm run lint',
+    testCmd: 'npm run test',
+    structure: [
+      'src/app/          — Next.js App Router pages + API routes',
+      'src/components/   — reusable UI components',
+      'src/lib/          — singleton clients (db, redis, auth)',
+      'src/services/     — external API fetchers',
+      'src/hooks/        — custom React hooks',
+      'src/styles/       — global CSS + theme variables',
+      'src/types/        — shared TypeScript types + Zod schemas',
+      'src/bot/          — Slack/Discord bot (if applicable)',
+      'prisma/           — Prisma schema + migrations',
+      'docs/             — MDX documentation files',
+      'public/           — static assets',
+    ],
+  },
 };
+
+// ── Simple task templates (non-NEW_TOOL) ─────────────────────────────────────
 
 const THINKING_HINTS = {
   REFACTOR:            'Think through the full call graph and state flow before writing a single line of code.',
@@ -23,7 +393,6 @@ const THINKING_HINTS = {
 };
 
 const TASK_TIME = {
-  NEW_TOOL:            '3–5 hours',
   NEW_FEATURE:         '2–4 hours',
   BUG_FIX:             '1–2 hours',
   CODE_REVIEW:         '1 hour',
@@ -35,325 +404,575 @@ const TASK_TIME = {
   DOC_OR_SPEC:         '1–2 hours',
 };
 
-const SCOPE_MAP = {
-  NEW_TOOL:            'the new project directory only',
-  NEW_FEATURE:         'only files directly integrating this feature and any new feature files',
-  BUG_FIX:             'the minimum files needed to fix the root cause — no refactoring',
-  CODE_REVIEW:         'only the files or PR under review — do not suggest out-of-scope rewrites',
-  REFACTOR:            'explicitly listed files/modules only — do not touch callers',
-  DEBUG_INVESTIGATION: 'read-only — produce a report, implement nothing',
-  DESIGN_DECISION:     'analysis only — no code written',
-  PERF_OPTIMIZATION:   'only the measured bottlenecks — no speculative optimization',
-  DATA_INTEGRATION:    'new service layer and UI consuming it — no changes to unrelated UI',
-  DOC_OR_SPEC:         'only documentation files — do not edit source code',
-};
+// ── Feature extraction ────────────────────────────────────────────────────────
 
-const ABORT_MAP = {
-  NEW_TOOL:            'scaffold command fails or entry point does not run',
-  NEW_FEATURE:         'existing tests break after integration',
-  BUG_FIX:             'cannot reproduce after 2 attempts — report reproduction failure, stop',
-  CODE_REVIEW:         'you cannot read a file — note it as unreviewed, continue with visible files',
-  REFACTOR:            'any test fails after a commit — revert and investigate before next change',
-  DEBUG_INVESTIGATION: 'you start wanting to fix something — investigation only, save fix for a BUG_FIX session',
-  DESIGN_DECISION:     'you start writing implementation code — analysis only',
-  PERF_OPTIMIZATION:   'you start editing code — stop, complete the profiling report first',
-  DATA_INTEGRATION:    'you are about to write credentials or API keys into any file — use env vars only',
-  DOC_OR_SPEC:         'you start editing source files — documentation only',
-};
-
-const SESSION_LABELS = {
-  NEW_TOOL:            ['Session 1 — Scaffold & Happy Path', 'Session 2 — Core Features'],
-  NEW_FEATURE:         ['Session 1 — Implement Feature'],
-  BUG_FIX:             ['Session 1 — Reproduce & Fix'],
-  CODE_REVIEW:         ['Session 1 — Review'],
-  REFACTOR:            ['Session 1 — Characterization Tests', 'Session 2 — Apply Refactor'],
-  DEBUG_INVESTIGATION: ['Session 1 — Investigate & Report'],
-  DESIGN_DECISION:     ['Session 1 — Analyze Options & Recommend'],
-  PERF_OPTIMIZATION:   ['Session 1 — Profile & Measure', 'Session 2 — Fix Bottlenecks'],
-  DATA_INTEGRATION:    ['Session 1 — Types & Mock UI', 'Session 2 — Wire Real API'],
-  DOC_OR_SPEC:         ['Session 1 — Write Documentation'],
-};
-
-function buildTitle(input) {
-  let t = input.trim().replace(/[.!?]+$/, '').trim();
-  if (t.length > 58) t = t.slice(0, 55) + '...';
-  return t.charAt(0).toUpperCase() + t.slice(1);
+function extractFeatures(input) {
+  return FEATURE_REGISTRY
+    .filter(f => f.detect.test(input))
+    .sort((a, b) => a.priority - b.priority);
 }
 
-function constraints(ctx) {
-  const lines = [];
-  if (ctx?.rules?.length) {
-    for (const r of ctx.rules.slice(0, 6)) lines.push(r);
+function advisedStack(projectContext) {
+  if (projectContext?.techStack?.length) {
+    return {
+      ...STACK_PROFILES.nextjs,
+      core: projectContext.techStack,
+      packageMgr: projectContext.packageMgr || 'npm',
+      devCmd:       projectContext.scripts?.dev       || 'npm run dev',
+      buildCmd:     projectContext.scripts?.build     || 'npm run build',
+      typecheckCmd: projectContext.scripts?.typecheck || 'npx tsc --noEmit',
+      lintCmd:      projectContext.scripts?.lint      || 'npm run lint',
+      testCmd:      projectContext.scripts?.test      || 'npm run test',
+    };
   }
-  lines.push('TypeScript strict — no `any`, no non-null assertions without inline comment');
-  lines.push('Run `npx tsc --noEmit` after every file change — fix errors before proceeding to the next step');
-  return lines;
+  return STACK_PROFILES.nextjs;
 }
 
-function verification(taskType, ctx) {
-  const s = ctx?.scripts || {};
-  const pm = ctx?.packageMgr || 'npm';
-  const lines = [];
-  if (s.typecheck)      lines.push(`${pm} run typecheck → 0 errors`);
-  else if (s['type-check']) lines.push(`${pm} run type-check → 0 errors`);
-  else                  lines.push('npx tsc --noEmit → 0 errors');
-  if (s.lint)           lines.push(`${pm} run lint → 0 warnings`);
-  if (s.test)           lines.push(`${pm} run test → all tests pass`);
-  if (taskType === 'BUG_FIX') lines.push('regression test: fails before fix, passes after fix');
-  return lines;
-}
+// ── Session builders ──────────────────────────────────────────────────────────
 
-function buildSteps(taskType, ctx) {
-  const pm = ctx?.packageMgr || 'npm';
-  const scripts = ctx?.scripts || {};
-  const testCmd = scripts.test ? `${pm} run test` : 'npx tsc --noEmit';
-  const buildCmd = scripts.build ? `${pm} run build` : testCmd;
+function scaffoldSession(input, features, stack) {
+  const pm = stack.packageMgr;
+  const hasDB = features.some(f => f.group === 'infrastructure' && f.id === 'database') ||
+                features.some(f => f.dbSchema);
+  const hasAuth = features.some(f => f.id === 'auth');
+  const hasTheme = features.some(f => f.id === 'themes');
 
-  switch (taskType) {
-    case 'BUG_FIX':
-      return [
-        'Reproduce the bug with a specific input or failing test — do not proceed until reproduced',
-        "grep -r '<relevant symbol>' src/ — confirm the suspected location",
-        'Read the suspect file(s) — form a hypothesis before writing any code',
-        'Write a regression test that fails before the fix',
-        'Apply the minimal fix — verify the regression test now passes',
-        `${testCmd} → all tests pass including the regression`,
-      ];
-    case 'CODE_REVIEW':
-      return [
-        'Read each changed file top to bottom',
-        'Classify findings: [BLOCKER] / [MAJOR] / [MINOR] / [NIT] — format: "file:line — description. Suggested fix."',
-        'Check for security issues: injection, auth bypass, unvalidated input',
-        'Check for correctness: off-by-one, null handling, race conditions',
-        'End with "Top 3 Blockers" summary',
-      ];
-    case 'DEBUG_INVESTIGATION':
-      return [
-        'State 2–3 hypotheses about the root cause',
-        'For each hypothesis: design the cheapest confirming test',
-        'Run tests in order — stop when one is confirmed',
-        'Write report: hypothesis → test → result → conclusion',
-        'End with confirmed root cause + recommended fix session',
-      ];
-    case 'DESIGN_DECISION':
-      return [
-        'Define decision criteria (performance, maintainability, migration cost)',
-        'Present 2–3 concrete options with pros, cons, and failure modes',
-        'Make a concrete recommendation with 1-sentence rationale — no "it depends" without a decision framework',
-        'Output a ready-to-paste implementation prompt for the chosen option',
-      ];
-    case 'PERF_OPTIMIZATION':
-      return [
-        'Open DevTools Network + Performance tabs — record baseline numbers before any change',
-        'Identify top 3 bottlenecks by measured impact',
-        'STOP — do not edit any code in this session',
-        'Write profiling report: metric → baseline → bottleneck → expected improvement',
-      ];
-    case 'DOC_OR_SPEC':
-      return [
-        'Read existing source code to extract accurate information — do not invent behavior',
-        'Write Overview (≤200 words)',
-        'Write Quickstart (runnable example with exact commands)',
-        'Write Config section (all env vars with type and default)',
-        'Write Troubleshooting (top 3 failure modes + fixes)',
-      ];
-    case 'REFACTOR':
-      return [
-        'Run the test suite — confirm all tests pass before any code change',
-        'Write characterization tests for every public behavior of the target module',
-        `${testCmd} → all characterization tests pass`,
-        'STOP — do not modify any implementation code in this session',
-        'Write HANDOFF NOTE with: test file location, all covered behaviors, known edge cases',
-      ];
-    case 'DATA_INTEGRATION':
-      return [
-        "grep -r '<API or data source name>' src/ — confirm no duplicate integration exists",
-        'Define TypeScript types for the data shape',
-        'Create mock data file at src/mocks/<feature>.ts',
-        'Build UI components consuming the mock — add [MOCK] badge visible when mock data is active',
-        `${buildCmd} → no errors`,
-      ];
-    default:
-      return [
-        "grep -r '<key symbol>' src/ — confirm expected structure exists before writing",
-        'Read 2 existing similar files to understand naming and import conventions',
-        'Implement the change following existing patterns — no new abstractions if existing ones cover the case',
-        'Integrate with existing code',
-        `${testCmd} → no failures`,
-      ];
+  const steps = [
+    `${stack.scaffold}`,
+    `${pm} install — verify: ${pm} run dev → http://localhost:3000 loads`,
+  ];
+
+  if (hasDB) {
+    steps.push(`${pm} install @prisma/client && ${pm} install -D prisma`);
+    steps.push('npx prisma init — set DATABASE_URL=postgresql://user:pass@localhost:5432/appdb in .env');
   }
-}
-
-function buildSession2Steps(taskType, ctx) {
-  const pm = ctx?.packageMgr || 'npm';
-  const scripts = ctx?.scripts || {};
-  const testCmd = scripts.test ? `${pm} run test` : 'npx tsc --noEmit';
-
-  switch (taskType) {
-    case 'NEW_TOOL':
-      return [
-        'Read HANDOFF NOTE from Session 1 — verify scaffolded state before proceeding',
-        'Implement each core feature one at a time — commit after each feature',
-        'Add error handling for expected failure modes',
-        `${testCmd} → all tests pass`,
-      ];
-    case 'REFACTOR':
-      return [
-        'Read Session 1 HANDOFF NOTE — verify characterization tests are in place',
-        'Apply ONE change type per commit: rename OR extract OR move — never mixed',
-        `After each commit: ${testCmd} → must pass before the next change`,
-        'If any test fails after a commit: revert and investigate before proceeding',
-      ];
-    case 'PERF_OPTIMIZATION':
-      return [
-        'Read Session 1 profiling report — confirm baseline numbers',
-        'Fix bottleneck #1 — measure after: must beat baseline; note before/after in commit message',
-        'Fix bottleneck #2 — measure after: must beat baseline; note before/after in commit message',
-        'Fix bottleneck #3 — measure after: must beat baseline; note before/after in commit message',
-      ];
-    case 'DATA_INTEGRATION':
-      return [
-        'Read Session 1 HANDOFF NOTE — confirm mock data and types are in place',
-        'Add MOCK_MODE env var check — when true, use mock data',
-        'Implement real API call in service layer — use env vars for all credentials',
-        'Add loading, error, and empty states',
-        'Remove [MOCK] badge when real data loads successfully',
-      ];
-    default:
-      return [
-        'Read Session 1 HANDOFF NOTE — verify state before proceeding',
-        'Handle edge cases and secondary functionality',
-        'Add polish and error handling',
-        `${testCmd} → all tests pass`,
-      ];
+  if (hasAuth) {
+    steps.push(`${pm} install next-auth @auth/prisma-adapter`);
   }
+  steps.push('Create src/app/layout.tsx — root layout with sidebar navigation: Dashboard, Config, Settings, Docs');
+  steps.push('Create src/components/Sidebar.tsx — nav links, active-link highlight, collapse toggle');
+  if (hasTheme) {
+    steps.push('Import src/styles/themes.css in layout.tsx — set default data-theme="arctic-dark" on <html>');
+  }
+  steps.push(`${stack.typecheckCmd} → 0 errors`);
+
+  return {
+    label: 'Session 1 — Scaffold & Project Structure',
+    content: buildSessionContent({
+      context: `Scaffold the project for: ${input.trim().slice(0, 120)}`,
+      scope: 'the new project directory only — do not write feature logic yet',
+      steps,
+      abort: 'scaffold command fails or dev server does not start',
+      constraints: [
+        'TypeScript strict — no `any`, no non-null assertions without inline comment',
+        'Zod at all external data boundaries (API responses, env vars, user input)',
+        'No hardcoded credentials — all secrets via process.env + .env file',
+        `Run \`${stack.typecheckCmd}\` after every file change`,
+      ],
+      verification: [`${pm} run dev → http://localhost:3000 loads with sidebar nav`],
+      isLast: false,
+      nextSession: 'Session 2',
+    }),
+    time: '2–3 hours',
+    description: `Scaffold ${stack.label.split('+')[0].trim()} project, install core dependencies, create layout with sidebar navigation`,
+  };
 }
 
-function buildSessionContent(input, taskType, ctx, sessionIndex) {
-  const hint = THINKING_HINTS[taskType];
-  const scope = SCOPE_MAP[taskType] || 'files directly required by the task';
-  const abort = ABORT_MAP[taskType] || 'required file does not exist and cannot be located';
-  const c = constraints(ctx);
-  const v = verification(taskType, ctx);
-  const steps = sessionIndex === 0
-    ? buildSteps(taskType, ctx)
-    : buildSession2Steps(taskType, ctx);
+function featureSession(feature, idx, totalSessions, stack, allFeatures) {
+  const pm = stack.packageMgr;
+  const steps = [...feature.steps];
 
+  // Replace generic npm with project package manager
+  const resolvedSteps = steps.map(s => s.replace(/^npm install/g, `${pm} install`));
+
+  const constraints = [
+    'TypeScript strict — no `any`, no non-null assertions',
+    `Run \`${stack.typecheckCmd}\` after every file change`,
+  ];
+
+  // Add CLAUDE.md rules if available
+  if (feature.id === 'auth') constraints.push('Never store passwords in plaintext — use NextAuth session only');
+  if (feature.group === 'integration') constraints.push('Validate all external API responses with Zod before using');
+  if (feature.dbSchema) constraints.push('Run `npx prisma migrate dev` — never edit migration files manually');
+  if (feature.envVars?.length) {
+    constraints.push(`Required env vars: ${feature.envVars.join(', ')} — fail fast if missing using z.string().min(1)`);
+  }
+
+  const verification = [];
+  if (feature.routes) {
+    feature.routes.slice(0, 2).forEach(r => {
+      const method = r.split(' ')[0];
+      const path = r.split(' ')[1];
+      if (method === 'GET') verification.push(`curl http://localhost:3000${path} → non-empty JSON response`);
+    });
+  }
+  verification.push(`${stack.typecheckCmd} → 0 errors`);
+  if (stack.testCmd && stack.testCmd !== 'npm run test') verification.push(`${stack.testCmd} → all pass`);
+
+  const isLast = idx === totalSessions - 1;
+
+  return {
+    label: `Session ${idx + 1} — ${feature.label}`,
+    content: buildSessionContent({
+      hint: feature.group === 'integration' ? 'Verify the external API contract with a curl or test call before writing any service logic.' : undefined,
+      context: `Implement ${feature.label} — integrate with existing scaffold from Session 1`,
+      scope: `only files related to ${feature.label}: ${(feature.routes || []).slice(0, 3).join(', ') || 'src/services, src/app/api, src/components'}`,
+      steps: resolvedSteps,
+      abort: feature.id === 'remote-config'
+        ? 'prisma migrate dev fails — check DATABASE_URL and run npx prisma db push to verify connection'
+        : feature.group === 'integration'
+        ? `external API returns 401/403 — verify env vars are set; do not hard-code credentials`
+        : 'existing TypeScript errors increase — fix before adding more code',
+      never: feature.envVars?.length
+        ? 'write API keys or secrets directly in source files — always use process.env'
+        : 'modify files outside the stated scope without flagging it first',
+      constraints,
+      verification,
+      isLast,
+      nextSession: isLast ? null : `Session ${idx + 2}`,
+    }),
+    time: feature.time || '2–3 hours',
+    description: feature.steps[0] || `Implement ${feature.label}`,
+  };
+}
+
+function buildSessionContent({ hint, context, scope, steps, abort, never, constraints, verification, isLast, nextSession }) {
   const lines = [];
   if (hint) lines.push(hint);
-
-  lines.push(sessionIndex === 0
-    ? `Context: ${input.trim()}`
-    : `Context: Session 1 established the foundation for: ${input.trim().slice(0, 80)}`
-  );
-
+  lines.push(`Context: ${context}`);
   lines.push(`Scope: ONLY modify ${scope}. Flag but do not fix anything outside scope.`);
   lines.push('Steps:');
   steps.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
-
   lines.push('Guardrails:');
-  lines.push(`- STOP and report if: ${abort}`);
-  lines.push('- Never: modify more than 5 files for a single step — decompose first; use --no-verify on git hooks');
-
+  lines.push(`- STOP and report if: ${abort || 'required file does not exist and cannot be located with grep'}`);
+  lines.push(`- Never: ${never || 'modify more than 5 files in a single step — decompose first; bypass git hooks with --no-verify'}`);
   lines.push('Constraints:');
-  c.forEach(r => lines.push(`- ${r}`));
-
+  constraints.forEach(c => lines.push(`- ${c}`));
   lines.push('Verification:');
-  v.forEach(r => lines.push(`- ${r}`));
+  verification.forEach(v => lines.push(`- ${v}`));
+  if (!isLast && nextSession) {
+    lines.push('HANDOFF NOTE:');
+    lines.push('- Completed: <bullet list of what now works — fill in after session>');
+    lines.push('- State: <one sentence describing what the next agent will find>');
+    lines.push(`- Next session starts at: ${nextSession}`);
+    lines.push('- Caution: <any warnings or known issues for the next agent>');
+  }
+  return lines.join('\n');
+}
+
+// ── SPEC.md + CLAUDE.md generators ───────────────────────────────────────────
+
+function buildSpec(input, features, stack, sessions) {
+  const pm = stack.packageMgr;
+  const allPackages = [...new Set(features.flatMap(f => f.packages || []))];
+  const allEnvVars = [...new Set(features.flatMap(f => f.envVars || []))];
+  const allRoutes = [...new Set(features.flatMap(f => f.routes || []))];
+  const dbFeatures = features.filter(f => f.dbSchema);
+
+  const lines = [
+    '# SPEC.md',
+    '',
+    '## Purpose',
+    input.trim(),
+    '',
+    '## Tech Stack',
+    stack.label,
+    '',
+    '## Package Manager',
+    pm,
+    '',
+    '## Key Commands',
+    `- Install:    \`${pm} install\``,
+    `- Dev:        \`${pm} run dev\``,
+    `- Build:      \`${pm} run build\``,
+    `- Type check: \`${stack.typecheckCmd}\``,
+    `- Lint:       \`${stack.lintCmd}\``,
+    '',
+    '## Directory Structure',
+    ...stack.structure.map(l => `  ${l}`),
+    '',
+  ];
+
+  if (allPackages.length) {
+    lines.push('## Dependencies');
+    allPackages.forEach(p => lines.push(`- ${p}`));
+    lines.push('');
+  }
+
+  if (allEnvVars.length) {
+    lines.push('## Environment Variables');
+    allEnvVars.forEach(v => lines.push(`- \`${v}\`=<value>`));
+    lines.push('');
+  }
+
+  if (allRoutes.length) {
+    lines.push('## API Routes');
+    allRoutes.forEach(r => lines.push(`- \`${r}\``));
+    lines.push('');
+  }
+
+  if (dbFeatures.length) {
+    lines.push('## Database Schema (Prisma)');
+    dbFeatures.forEach(f => {
+      lines.push(`### ${f.label}`);
+      lines.push('```prisma');
+      (f.dbSchema || []).forEach(l => lines.push(l));
+      lines.push('```');
+      lines.push('');
+    });
+  }
+
+  lines.push('## Session Breakdown');
+  sessions.forEach((s, i) => {
+    lines.push(`### ${s.label}`);
+    lines.push(`**Estimated time:** ${s.time}`);
+    lines.push(`${s.description}`);
+    lines.push('');
+  });
 
   return lines.join('\n');
 }
 
-function buildPlanDesc(taskType, sessionIndex, input) {
-  const descs = [
-    {
-      NEW_TOOL:            'Scaffold the project, install dependencies, verify the happy path end-to-end',
-      NEW_FEATURE:         `Implement: ${input.slice(0, 80)}`,
-      BUG_FIX:             'Reproduce, locate root cause, apply minimal fix, add regression test',
-      CODE_REVIEW:         'Review all changed files, classify findings by severity, produce Top 3 Blockers',
-      REFACTOR:            'Add characterization tests to lock in current behavior before any code changes',
-      DEBUG_INVESTIGATION: 'Form hypotheses, run cheapest confirming tests, produce root-cause report',
-      DESIGN_DECISION:     'Evaluate 2–3 options, recommend with rationale, produce implementation prompt',
-      PERF_OPTIMIZATION:   'Profile the application and identify the top 3 bottlenecks — no code changes',
-      DATA_INTEGRATION:    'Define TypeScript types, build mock data, connect UI to mock with [MOCK] badge',
-      DOC_OR_SPEC:         'Write complete documentation: Overview, Quickstart, Config, Troubleshooting',
-    },
-    {
-      NEW_TOOL:            'Implement core features one at a time, add error handling, run all tests',
-      NEW_FEATURE:         'Handle edge cases, add polish, ensure all tests pass',
-      REFACTOR:            'Apply one change type per commit: rename OR extract OR move — never mixed',
-      PERF_OPTIMIZATION:   'Fix top 3 bottlenecks in order of impact, one fix per commit with before/after numbers',
-      DATA_INTEGRATION:    'Wire real API behind MOCK_MODE flag, add error states, remove [MOCK] badge',
-    },
-  ];
-  return descs[sessionIndex]?.[taskType] ?? (sessionIndex === 0 ? 'Implement the requested change' : 'Complete remaining work from session 1');
+function buildClaudemd(stack) {
+  const pm = stack.packageMgr;
+  return [
+    '# CLAUDE.md',
+    '',
+    '## Rules',
+    '- TypeScript strict — no `any`, no non-null assertions without inline comment',
+    '- Zod at all external data boundaries (user input, API responses, env vars, DB rows)',
+    '- One concern per session — no mixed refactor + feature work',
+    '- Diagnose before mutate — grep/read before editing any file',
+    '- No hardcoded credentials — always process.env; never write to .env files from code',
+    '- Validate all external API responses with Zod before using in UI or storing',
+    '- Run `npx prisma migrate dev` for schema changes — never edit migration files manually',
+    '',
+    '## Commands',
+    `- Install:    ${pm} install`,
+    `- Dev:        ${pm} run dev`,
+    `- Build:      ${pm} run build`,
+    `- Type check: ${stack.typecheckCmd}`,
+    `- Lint:       ${stack.lintCmd}`,
+    `- DB push:    npx prisma db push`,
+    `- DB migrate: npx prisma migrate dev --name <description>`,
+    `- DB studio:  npx prisma studio`,
+    '',
+    '## Commit Convention',
+    '- Format: type(scope): description',
+    '- Types: feat, fix, refactor, chore, test, docs',
+    '- Examples: feat(remote-config): add test endpoint | fix(slack-bot): handle missing env vars',
+    '',
+    '## Branch Naming',
+    '- feature/<short-description>',
+    '- fix/<short-description>',
+  ].join('\n');
 }
 
-function buildChecklist(taskType, ctx) {
-  const s = ctx?.scripts || {};
-  const pm = ctx?.packageMgr || 'npm';
+// ── Checklist builder ─────────────────────────────────────────────────────────
+
+function buildChecklist(features, stack) {
+  const pm = stack.packageMgr;
   const items = [];
 
-  if (s.typecheck)          items.push(`${pm} run typecheck → 0 errors`);
-  else if (s['type-check']) items.push(`${pm} run type-check → 0 errors`);
-  else                      items.push('npx tsc --noEmit → 0 errors');
+  items.push(`${stack.typecheckCmd} → 0 errors`);
+  items.push(`${pm} run lint → 0 warnings`);
 
-  if (s.lint)   items.push(`${pm} run lint → 0 warnings`);
-  if (s.test)   items.push(`${pm} run test → all tests pass`);
-  if (s.build)  items.push(`${pm} run build → no build errors`);
+  if (features.some(f => f.id === 'database' || f.dbSchema)) {
+    items.push('npx prisma migrate status → all migrations applied');
+    items.push('npx prisma validate → schema is valid');
+  }
+  if (features.some(f => f.group === 'integration')) {
+    items.push('All external API routes return non-empty JSON (curl each GET route)');
+  }
+  if (features.some(f => f.id === 'remote-config')) {
+    items.push('POST /api/remote-config → 201 created; GET /api/remote-config → array with new entry');
+  }
+  if (features.some(f => f.id === 'slack-bot')) {
+    items.push('/stability Slack command → Block Kit card with real crash rate value');
+  }
+  if (features.some(f => f.id === 'themes')) {
+    items.push('Select each of the 12 theme×mode combinations → page repaints correctly; refresh → persists');
+  }
+  if (features.some(f => f.id === 'charts')) {
+    items.push('/dashboard loads without hydration errors; all Recharts components wrapped in "use client"');
+  }
+  if (features.some(f => f.id === 'docs')) {
+    items.push('/docs/getting-started renders MDX with syntax-highlighted code blocks');
+  }
 
-  if (taskType === 'BUG_FIX')          items.push('regression test: fails before fix, passes after fix');
-  if (taskType === 'DATA_INTEGRATION') items.push('MOCK_MODE=true → [MOCK] badge visible; MOCK_MODE=false → real data loads');
-  if (taskType === 'PERF_OPTIMIZATION') items.push('profiling report: baseline numbers recorded for all 3 bottlenecks');
-  if (taskType === 'CODE_REVIEW')      items.push('review complete: all files read, Top 3 Blockers identified');
-
+  items.push(`${pm} run build → no build errors`);
   items.push('git status → no unintended files staged');
+
   return items;
 }
 
-function buildNewToolFiles(input, ctx) {
-  const stack = ctx?.techStack?.join(', ') || 'Node.js';
-  const pm = ctx?.packageMgr || 'npm';
+// ── Title builder ─────────────────────────────────────────────────────────────
 
-  return [
-    {
-      filename: 'SPEC.md',
-      content: `# SPEC.md\n\n## Purpose\n${input.trim()}\n\n## Tech Stack\n${stack}\n\n## Package Manager\n${pm}\n\n## Key Commands\n- Install: \`${pm} install\`\n- Dev: \`${pm} run dev\`\n- Test: \`${pm} run test\`\n- Build: \`${pm} run build\`\n\n## Architecture\n[To be filled in after scaffolding]\n\n## API / Interface\n[To be filled in after design]\n`,
-    },
-    {
-      filename: 'CLAUDE.md',
-      content: `# CLAUDE.md\n\n## Rules\n- TypeScript strict — no \`any\`, no non-null assertions without inline comment\n- Zod at all external data boundaries (user input, API responses, env vars)\n- One concern per session — no mixed refactor + feature work\n- Diagnose before mutate — grep/read before editing\n- No hardcoded credentials — always env vars\n\n## Commands\n- Install: ${pm} install\n- Dev: ${pm} run dev\n- Test: ${pm} run test\n- Build: ${pm} run build\n- Type check: npx tsc --noEmit\n`,
-    },
-  ];
+function buildTitle(input) {
+  // Strip filler, capitalise, trim to 58 chars
+  let t = input.trim().replace(/^(build|create|make|add|implement|develop)\s+/i, '').replace(/[.!?]+$/, '').trim();
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  if (t.length > 55) t = t.slice(0, 55) + '...';
+  return t;
 }
 
-export function generateFromScript(input, taskType, projectContext) {
-  const type = taskType || 'NEW_FEATURE';
-  const count = SESSION_COUNTS[type] ?? 1;
+// ── Simple task generators (BUG_FIX, CODE_REVIEW, etc.) ──────────────────────
+
+function buildSimpleTask(input, taskType, projectContext) {
+  const stack = advisedStack(projectContext);
+  const pm = stack.packageMgr;
+  const tc = stack.typecheckCmd;
+
+  const SIMPLE = {
+    BUG_FIX: {
+      hint: 'Do not write any fix until you can reproduce the bug with a specific input or test case.',
+      sessions: [{ label: 'Session 1 — Reproduce & Fix', steps: [
+        `Reproduce the bug with a specific input or failing test — do not proceed until reproduced`,
+        `grep -r '<relevant symbol>' src/ — locate the suspected call site`,
+        `Read the suspect file — form a hypothesis before touching any code`,
+        `Write a regression test that fails before the fix`,
+        `Apply the minimal fix — verify regression test now passes`,
+        `${pm} run test → all tests pass including regression`,
+      ], abort: 'cannot reproduce after 2 attempts — report reproduction failure, stop', time: '1–2 hours' }],
+      checklist: [`${tc} → 0 errors`, `${pm} run test → all tests pass`, 'regression test: fails before fix, passes after fix', 'git status → no unintended files staged'],
+    },
+    CODE_REVIEW: {
+      sessions: [{ label: 'Session 1 — Review', steps: [
+        'Read each changed file top to bottom — do not skip any',
+        'Classify findings: [BLOCKER] / [MAJOR] / [MINOR] / [NIT] — format: "file:line — description. Suggested fix."',
+        'Check security: injection, auth bypass, unvalidated input at boundaries',
+        'Check correctness: off-by-one, null handling, race conditions, missing error cases',
+        'Check style: naming, dead code, missing tests for new logic',
+        'End with "Top 3 Blockers" summary — list in priority order',
+      ], abort: 'you cannot read a file — note it as unreviewed, continue with visible files', time: '1 hour' }],
+      checklist: ['all changed files reviewed', 'Top 3 Blockers listed', 'security findings classified as BLOCKER or MAJOR'],
+    },
+    REFACTOR: {
+      hint: 'Think through the full call graph before writing a single line of code.',
+      sessions: [
+        { label: 'Session 1 — Characterization Tests', steps: [
+          `${pm} run test → confirm all tests pass BEFORE any change`,
+          'Write characterization tests for every public behaviour of the target module',
+          `${pm} run test → all characterization tests pass`,
+          'STOP — do not modify any implementation code in this session',
+        ], abort: 'existing tests fail before you start — fix or report, do not proceed', time: '1–2 hours' },
+        { label: 'Session 2 — Apply Refactor', steps: [
+          'Read Session 1 HANDOFF NOTE — confirm tests are in place',
+          'Apply ONE change type per commit: rename OR extract OR move — never mixed',
+          `After each commit: ${pm} run test → must pass before next change`,
+          'If any test fails: revert the commit, investigate, then retry',
+        ], abort: 'any test fails after a commit — revert before continuing', time: '2–3 hours' },
+      ],
+      checklist: [`${tc} → 0 errors`, `${pm} run test → all pass`, 'no test regressions vs Session 1 baseline'],
+    },
+    DEBUG_INVESTIGATION: {
+      hint: 'Think through the full call graph and state flow before writing a single line of code.',
+      sessions: [{ label: 'Session 1 — Investigate & Report', steps: [
+        'State 2–3 hypotheses about the root cause with confidence level',
+        'For each hypothesis: design the cheapest confirming test (log, unit test, or grep)',
+        'Run tests in confidence order — stop when one is confirmed',
+        'Write report: hypothesis → test run → result → conclusion',
+        'End with: confirmed root cause + recommended fix session (BUG_FIX type)',
+      ], abort: 'you start wanting to fix something — investigation only, save fix for a BUG_FIX session', time: '1–2 hours' }],
+      checklist: ['root cause confirmed with a reproducible test or log', 'report written', 'fix recommendation documented'],
+    },
+    DESIGN_DECISION: {
+      hint: 'Think through the full call graph and state flow before writing a single line of code.',
+      sessions: [{ label: 'Session 1 — Analyze & Recommend', steps: [
+        'Define decision criteria (performance, maintainability, migration cost, team familiarity)',
+        'Present 2–3 concrete options — each with pros, cons, and known failure modes',
+        'Make a concrete recommendation with 1-sentence rationale — no "it depends" without a decision framework',
+        'Estimate migration cost for the chosen option in hours',
+        'Output a ready-to-paste implementation prompt for the chosen option',
+      ], abort: 'you start writing implementation code — analysis only', time: '1 hour' }],
+      checklist: ['2–3 options compared', 'concrete recommendation made', 'implementation prompt ready to paste'],
+    },
+    PERF_OPTIMIZATION: {
+      hint: 'Measure before optimizing — do not change any code until you have profiling numbers.',
+      sessions: [
+        { label: 'Session 1 — Profile & Measure', steps: [
+          'Open DevTools Network + Performance tabs — record baseline numbers before any code change',
+          'Identify top 3 bottlenecks by measured impact — not by intuition',
+          'STOP — do not edit any code in this session',
+          'Write profiling report: metric → baseline number → bottleneck → expected improvement',
+        ], abort: 'you start editing code — stop, complete the profiling report first', time: '1–2 hours' },
+        { label: 'Session 2 — Fix Bottlenecks', steps: [
+          'Read Session 1 profiling report — confirm baseline numbers',
+          'Fix bottleneck #1 — measure after: must beat baseline; add before/after to commit message',
+          'Fix bottleneck #2 — measure after: must beat baseline',
+          'Fix bottleneck #3 — measure after: must beat baseline',
+        ], abort: 'a fix does not beat the baseline — investigate before moving to next bottleneck', time: '2–3 hours' },
+      ],
+      checklist: ['profiling report written with baseline numbers', 'all 3 fixes measured before/after', `${tc} → 0 errors`, `${pm} run build → no errors`],
+    },
+    DATA_INTEGRATION: {
+      sessions: [
+        { label: 'Session 1 — Types & Mock UI', steps: [
+          `grep -r '<data source name>' src/ — confirm no duplicate integration exists`,
+          'Define TypeScript types and Zod schema for the data shape',
+          'Create src/mocks/<feature>.ts — realistic mock data matching the Zod schema',
+          'Build UI components consuming mock data — add [MOCK] badge when mock is active',
+          `${tc} → 0 errors`,
+        ], abort: 'you are about to write credentials in any source file — use env vars only', time: '2–3 hours' },
+        { label: 'Session 2 — Wire Real API', steps: [
+          'Read Session 1 HANDOFF NOTE — confirm mock and types are in place',
+          'Add MOCK_MODE env var — when true, use mock; when false, call real API',
+          'Implement real API call in service layer — all credentials from process.env',
+          'Add loading, error, and empty states to UI components',
+          'Remove [MOCK] badge when real data loads successfully',
+        ], abort: 'you are about to write credentials in any source file — use env vars only', time: '2–3 hours' },
+      ],
+      checklist: [`${tc} → 0 errors`, 'MOCK_MODE=true → [MOCK] badge visible', 'MOCK_MODE=false → real data loads', 'git status → no .env files staged'],
+    },
+    DOC_OR_SPEC: {
+      sessions: [{ label: 'Session 1 — Write Documentation', steps: [
+        'Read existing source code to extract accurate information — do not invent behaviour',
+        'Write Overview section (≤200 words)',
+        'Write Quickstart section (runnable example with exact commands)',
+        'Write Config section (all env vars with type and default)',
+        'Write Troubleshooting section (top 3 failure modes + fixes)',
+      ], abort: 'you start editing source files — documentation only', time: '1–2 hours' }],
+      checklist: ['all env vars documented', 'quickstart is runnable without modification', 'top 3 failure modes covered'],
+    },
+    NEW_FEATURE: {
+      sessions: [{ label: 'Session 1 — Implement Feature', steps: [
+        `grep -r '<key symbol>' src/ — confirm expected structure exists before writing`,
+        'Read 2 existing similar files to understand naming, import style, and error-handling patterns',
+        'Implement the feature following existing patterns — no new abstractions if existing ones cover the case',
+        'Integrate with existing code',
+        `${pm} run test → no failures`,
+      ], abort: 'existing tests break after integration', time: '2–4 hours' }],
+      checklist: [`${tc} → 0 errors`, `${pm} run lint → 0 warnings`, `${pm} run test → all pass`, 'git status → no unintended files staged'],
+    },
+  };
+
+  const template = SIMPLE[taskType] || SIMPLE.NEW_FEATURE;
+  const hint = THINKING_HINTS[taskType];
   const title = buildTitle(input);
-  const labels = SESSION_LABELS[type] || [`Session 1 — Implement`];
+  const sessions = template.sessions;
+  const total = sessions.length;
 
-  const generatedPrompts = [];
-  for (let i = 0; i < count; i++) {
-    let content = buildSessionContent(input, type, projectContext, i);
-
-    // Append HANDOFF NOTE to all non-final sessions of multi-session tasks
-    if (i < count - 1) {
-      content += `\nHANDOFF NOTE:\n- Completed: <fill in after completing this session>\n- State: <one sentence describing what the next agent will find>\n- Next session starts at: ${labels[i + 1] || `Session ${i + 2}`}\n- Caution: <any warnings for the next agent>`;
+  const generatedPrompts = sessions.map((s, i) => {
+    const isLast = i === total - 1;
+    const lines = [];
+    if (hint && i === 0) lines.push(hint);
+    lines.push(`Context: ${input.trim()}`);
+    lines.push(`Scope: ONLY modify ${
+      taskType === 'BUG_FIX' ? 'the minimum files needed to fix the root cause — no refactoring' :
+      taskType === 'CODE_REVIEW' ? 'the files under review — do not suggest out-of-scope rewrites' :
+      taskType === 'REFACTOR' ? 'explicitly listed files/modules — do not touch callers' :
+      taskType === 'DEBUG_INVESTIGATION' ? 'read-only — produce a report, implement nothing' :
+      taskType === 'DESIGN_DECISION' ? 'analysis only — no code written' :
+      taskType === 'PERF_OPTIMIZATION' ? 'only the measured bottlenecks — no speculative optimization' :
+      'files directly required by this task'
+    }. Flag but do not fix anything outside scope.`);
+    lines.push('Steps:');
+    s.steps.forEach((step, idx) => lines.push(`${idx + 1}. ${step}`));
+    lines.push('Guardrails:');
+    lines.push(`- STOP and report if: ${s.abort || 'required file does not exist and cannot be located'}`);
+    lines.push('- Never: modify more than 5 files for a single step — decompose first; use --no-verify on git hooks');
+    lines.push('Constraints:');
+    lines.push('- TypeScript strict — no `any`, no non-null assertions without inline comment');
+    lines.push(`- Run \`${tc}\` after every file change — fix errors before proceeding`);
+    if (projectContext?.rules?.length) {
+      projectContext.rules.slice(0, 4).forEach(r => lines.push(`- ${r}`));
     }
+    lines.push('Verification:');
+    (template.checklist || [`${tc} → 0 errors`]).forEach(c => lines.push(`- ${c}`));
+    if (!isLast) {
+      lines.push('HANDOFF NOTE:');
+      lines.push('- Completed: <fill in after completing this session>');
+      lines.push('- State: <one sentence describing what the next agent will find>');
+      lines.push(`- Next session starts at: ${sessions[i + 1]?.label || `Session ${i + 2}`}`);
+      lines.push('- Caution: <any warnings for the next agent>');
+    }
+    return { sessionLabel: s.label, content: lines.join('\n') };
+  });
 
-    generatedPrompts.push({ sessionLabel: labels[i] ?? `Session ${i + 1}`, content });
-  }
-
-  const generatedPlan = generatedPrompts.map((p, i) => ({
+  const generatedPlan = sessions.map((s, i) => ({
     session: i + 1,
-    title: p.sessionLabel.replace(/^Session \d+ — /, ''),
-    description: buildPlanDesc(type, i, input.trim()),
-    estimatedTime: TASK_TIME[type] || '2 hours',
+    title: s.label.replace(/^Session \d+ — /, ''),
+    description: s.steps[0] || s.label,
+    estimatedTime: s.time || TASK_TIME[taskType] || '2 hours',
   }));
 
-  const generatedChecklist = buildChecklist(type, projectContext);
-  const generatedFiles = type === 'NEW_TOOL' ? buildNewToolFiles(input, projectContext) : [];
+  return {
+    title,
+    generatedPrompts,
+    generatedFiles: [],
+    generatedPlan,
+    generatedChecklist: template.checklist || [`${tc} → 0 errors`, 'git status → no unintended files staged'],
+  };
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────────
+
+export function generateFromScript(input, taskType, projectContext) {
+  // For non-NEW_TOOL tasks or very short inputs, use the concise simple generator
+  const isComplex = taskType === 'NEW_TOOL' || taskType === 'DATA_INTEGRATION';
+  const features = isComplex ? extractFeatures(input) : [];
+
+  if (!isComplex || features.length < 2) {
+    return buildSimpleTask(input, taskType || 'NEW_FEATURE', projectContext);
+  }
+
+  // ── Advanced multi-session planning for complex NEW_TOOL tasks ──
+
+  const stack = advisedStack(projectContext);
+  const title = buildTitle(input);
+
+  // Ensure database session is included if any feature needs a DB schema
+  const needsDB = features.some(f => f.dbSchema);
+  const hasDBFeature = features.some(f => f.id === 'database');
+  const finalFeatures = (needsDB && !hasDBFeature)
+    ? [FEATURE_REGISTRY.find(f => f.id === 'database'), ...features].filter(Boolean)
+    : features;
+
+  // Build sessions: scaffold first, then one session per feature group
+  const featureSessions = finalFeatures.map((feature, i) =>
+    featureSession(feature, i + 1, finalFeatures.length + 1, stack, finalFeatures)
+  );
+
+  const scaffold = scaffoldSession(input, finalFeatures, stack);
+  const allSessions = [scaffold, ...featureSessions];
+
+  // Mark last session as final (no handoff note)
+  const lastIdx = allSessions.length - 1;
+
+  const generatedPrompts = allSessions.map((s, i) => {
+    const isLast = i === lastIdx;
+    // Re-build content with correct isLast flag for last session
+    if (i === 0) {
+      // Scaffold session — re-emit with correct isLast
+      return {
+        id: undefined,
+        sessionLabel: s.label,
+        content: s.content.replace(
+          /HANDOFF NOTE:[\s\S]*$/,
+          isLast ? '' : s.content.match(/HANDOFF NOTE:[\s\S]*$/)?.[0] || ''
+        ),
+      };
+    }
+    // Feature sessions — strip or keep HANDOFF NOTE
+    const feature = finalFeatures[i - 1];
+    const rebuilt = featureSession(feature, i, allSessions.length, stack, finalFeatures);
+    return { sessionLabel: rebuilt.label, content: rebuilt.content };
+  });
+
+  const generatedPlan = allSessions.map((s, i) => ({
+    session: i + 1,
+    title: s.label.replace(/^Session \d+ — /, ''),
+    description: s.description,
+    estimatedTime: s.time,
+  }));
+
+  const generatedChecklist = buildChecklist(finalFeatures, stack);
+
+  // Files: SPEC.md + CLAUDE.md
+  const generatedFiles = [
+    { filename: 'SPEC.md',    content: buildSpec(input, finalFeatures, stack, allSessions) },
+    { filename: 'CLAUDE.md',  content: buildClaudemd(stack) },
+  ];
 
   return { title, generatedPrompts, generatedFiles, generatedPlan, generatedChecklist };
 }

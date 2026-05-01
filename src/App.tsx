@@ -7,7 +7,7 @@ import { colors } from './lib/designSystem';
 import { api } from './lib/api';
 import { scanProject, getFailureCount } from './services/claude-cli';
 import { classifyTask } from './data/generators';
-import type { Task, Screen, ScannedContext } from './types';
+import type { Task, Screen, ScannedContext, ActiveBackend } from './types';
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -21,12 +21,16 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [knownIssuesCount, setKnownIssuesCount] = useState(0);
+  const [activeBackend, setActiveBackend] = useState<ActiveBackend | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     api.getTasks()
       .then(saved => { setTasks(saved); setDbReady(true); })
       .catch(() => setDbReady(true));
+    api.getBackend()
+      .then(setActiveBackend)
+      .catch(() => {});
   }, []);
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId) ?? null;
@@ -70,7 +74,7 @@ export default function App() {
       const { count } = await getFailureCount(taskType);
       setKnownIssuesCount(count);
 
-      const newTask = await api.generate(input, taskType, projectPath);
+      const newTask = await api.generate(input, taskType, projectPath, scannedContext);
       setTasks(prev => [newTask, ...prev]);
       setLiveTask(newTask);
       setSelectedTaskId(newTask.id);
@@ -172,6 +176,7 @@ export default function App() {
             isScanning={isScanning}
             scanError={scanError}
             onScanProject={handleScanProject}
+            activeBackend={activeBackend}
           />
         );
 
@@ -191,6 +196,7 @@ export default function App() {
             scanError={scanError}
             onScanProject={handleScanProject}
             knownIssuesCount={knownIssuesCount}
+            activeBackend={activeBackend}
           />
         );
     }

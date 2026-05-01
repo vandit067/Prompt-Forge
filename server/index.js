@@ -3,6 +3,7 @@ import cors from 'cors';
 import Anthropic from '@anthropic-ai/sdk';
 import { stmts } from './db.js';
 import { scanProject } from './project-scanner.js';
+import { generateFromScript } from './script-generator.js';
 
 const app = express();
 app.use(cors());
@@ -11,6 +12,48 @@ app.use(express.json({ limit: '4mb' }));
 const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null;
+
+// ── Ollama backend detection ──────────────────────────────────────────────────
+const OLLAMA_BASE = process.env.OLLAMA_HOST || 'http://localhost:11434';
+
+const PREFERRED_MODELS = [
+  /^qwen2\.5-coder/,
+  /^codellama/,
+  /^deepseek-coder/,
+  /^qwen2\.5/,
+  /^llama3\.2/,
+  /^llama3\.1/,
+  /^llama3/,
+  /^mistral/,
+  /^phi/,
+];
+
+async function detectOllamaModel() {
+  try {
+    const res = await fetch(`${OLLAMA_BASE}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) return null;
+    const { models } = await res.json();
+    if (!models?.length) return null;
+    for (const pattern of PREFERRED_MODELS) {
+      const match = models.find(m => pattern.test(m.name));
+      if (match) return match.name;
+    }
+    return models[0].name;
+  } catch {
+    return null;
+  }
+}
+
+async function detectActiveBackend() {
+  if (anthropic) return { backend: 'anthropic', model: 'claude-opus-4-7' };
+  const ollamaModel = await detectOllamaModel();
+  if (ollamaModel) return { backend: 'ollama', model: ollamaModel };
+  return { backend: 'script', model: null };
+}
+
+// Resolved once at startup via top-level await
+const activeBackend = await detectActiveBackend();
+console.log(`[backend] ${activeBackend.backend}${activeBackend.model ? ` · ${activeBackend.model}` : ''}`);
 
 // ── System prompt (static — qualifies for prompt caching) ─────────────────────
 const SYSTEM_PROMPT = `You are Prompt Forge, an expert orchestrator for Claude Code and AI coding agents.
@@ -299,11 +342,58 @@ app.post('/api/scan-project', async (req, res) => {
   }
 });
 
-// POST /api/generate — generate a structured task via Anthropic API
+// GET /api/backend — report which generation backend is active
+app.get('/api/backend', (_req, res) => {
+  res.json(activeBackend);
+});
+
+// ── Generation helpers ────────────────────────────────────────────────────────
+
+async function generateViaAnthropic(userMessage) {
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-7',
+    max_tokens: 4096,
+    thinking: { type: 'adaptive' },
+    system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: userMessage }],
+  });
+  const textBlock = response.content.find(b => b.type === 'text');
+  if (!textBlock) throw new Error('No text content in response');
+  return extractJSON(textBlock.text);
+}
+
+async function generateViaOllama(userMessage) {
+  const res = await fetch(`${OLLAMA_BASE}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: activeBackend.model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user',   content: userMessage },
+      ],
+      stream: false,
+      format: 'json',
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+  if (!res.ok) throw new Error(`Ollama ${res.status}: ${res.statusText}`);
+  const data = await res.json();
+  const content = data.message?.content;
+  if (!content) throw new Error('Ollama returned no content');
+  return extractJSON(typeof content === 'string' ? content : JSON.stringify(content));
+}
+
+function extractJSON(text) {
+  const strip = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+  try { return JSON.parse(strip); } catch { /* fall through */ }
+  const match = strip.match(/\{[\s\S]*\}/);
+  if (match) return JSON.parse(match[0]);
+  throw new Error('Cannot extract JSON from model response');
+}
+
+// POST /api/generate — route to active backend with script fallback
 app.post('/api/generate', async (req, res) => {
-  if (!anthropic) {
-    return res.status(503).json({ error: 'ANTHROPIC_API_KEY is not set. Add it to your .env file.' });
-  }
 
   const { input, projectPath, projectContext, taskType } = req.body;
 
@@ -375,74 +465,58 @@ app.post('/api/generate', async (req, res) => {
     knownIssuesBlock || null,
   ].filter(Boolean).join('\n');
 
+  // Route to active backend; always fall back to script on failure
+  let parsed;
   try {
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-7',
-      max_tokens: 4096,
-      thinking: { type: 'adaptive' },
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [{ role: 'user', content: userMessage }],
-    });
-
-    // Adaptive thinking may prepend thinking blocks — find the text block
-    const textBlock = response.content.find(b => b.type === 'text');
-    if (!textBlock) {
-      return res.status(500).json({ error: 'No text content in response' });
+    if (activeBackend.backend === 'anthropic') {
+      parsed = await generateViaAnthropic(userMessage);
+    } else if (activeBackend.backend === 'ollama') {
+      parsed = await generateViaOllama(userMessage);
+    } else {
+      parsed = generateFromScript(input, taskType || 'NEW_FEATURE', projectContext);
     }
-
-    let parsed;
-    try {
-      const raw = textBlock.text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-      parsed = JSON.parse(raw);
-    } catch {
-      console.error('Non-JSON response (first 500 chars):', textBlock.text.slice(0, 500));
-      return res.status(500).json({ error: 'Invalid JSON response from model' });
-    }
-
-    const now = new Date().toISOString();
-    const task = {
-      id:         `task-${uid()}`,
-      title:      (parsed.title || input.trim().slice(0, 58)).replace(/[.!?]+$/, ''),
-      input:      input.trim(),
-      taskType:   taskType || 'NEW_FEATURE',
-      projectPath: projectPath ?? undefined,
-      status:     'pending',
-      generatedPrompts: (parsed.generatedPrompts || []).map(p => ({ id: uid(), sessionLabel: p.sessionLabel, content: p.content })),
-      generatedFiles:   (parsed.generatedFiles || []).map(f => ({ id: uid(), filename: f.filename, content: f.content })),
-      generatedPlan:    (parsed.generatedPlan || []).map(s => ({ session: s.session, title: s.title, description: s.description, estimatedTime: s.estimatedTime })),
-      generatedChecklist: parsed.generatedChecklist || [],
-      createdAt:  now,
-      updatedAt:  now,
-    };
-
-    // Persist to DB
-    stmts.insertTask.run({
-      id:                  task.id,
-      title:               task.title,
-      input:               task.input,
-      task_type:           task.taskType,
-      project_path:        task.projectPath ?? null,
-      project_context:     projectContext ? JSON.stringify(projectContext) : null,
-      status:              task.status,
-      generated_prompts:   JSON.stringify(task.generatedPrompts),
-      generated_files:     JSON.stringify(task.generatedFiles),
-      generated_plan:      JSON.stringify(task.generatedPlan),
-      generated_checklist: JSON.stringify(task.generatedChecklist),
-      created_at:          task.createdAt,
-      updated_at:          task.updatedAt,
-    });
-
-    res.json(task);
   } catch (err) {
-    console.error('Anthropic API error:', err.message);
-    res.status(500).json({ error: err.message || 'Generation failed' });
+    console.warn(`[backend] ${activeBackend.backend} failed (${err.message}) — falling back to script`);
+    try {
+      parsed = generateFromScript(input, taskType || 'NEW_FEATURE', projectContext);
+    } catch (scriptErr) {
+      return res.status(500).json({ error: err.message || 'Generation failed' });
+    }
   }
+
+  const now = new Date().toISOString();
+  const task = {
+    id:         `task-${uid()}`,
+    title:      (parsed.title || input.trim().slice(0, 58)).replace(/[.!?]+$/, ''),
+    input:      input.trim(),
+    taskType:   taskType || 'NEW_FEATURE',
+    projectPath: projectPath ?? undefined,
+    status:     'pending',
+    generatedPrompts: (parsed.generatedPrompts || []).map(p => ({ id: uid(), sessionLabel: p.sessionLabel, content: p.content })),
+    generatedFiles:   (parsed.generatedFiles || []).map(f => ({ id: uid(), filename: f.filename, content: f.content })),
+    generatedPlan:    (parsed.generatedPlan || []).map(s => ({ session: s.session, title: s.title, description: s.description, estimatedTime: s.estimatedTime })),
+    generatedChecklist: parsed.generatedChecklist || [],
+    createdAt:  now,
+    updatedAt:  now,
+  };
+
+  stmts.insertTask.run({
+    id:                  task.id,
+    title:               task.title,
+    input:               task.input,
+    task_type:           task.taskType,
+    project_path:        task.projectPath ?? null,
+    project_context:     projectContext ? JSON.stringify(projectContext) : null,
+    status:              task.status,
+    generated_prompts:   JSON.stringify(task.generatedPrompts),
+    generated_files:     JSON.stringify(task.generatedFiles),
+    generated_plan:      JSON.stringify(task.generatedPlan),
+    generated_checklist: JSON.stringify(task.generatedChecklist),
+    created_at:          task.createdAt,
+    updated_at:          task.updatedAt,
+  });
+
+  res.json(task);
 });
 
 // POST /api/tasks — save a new task

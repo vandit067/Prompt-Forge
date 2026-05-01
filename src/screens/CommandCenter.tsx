@@ -3,7 +3,7 @@ import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, L
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
-import type { Task, OutputTab, ProjectMode, ScannedContext } from '../types';
+import type { Task, OutputTab, ProjectMode, ScannedContext, ActiveBackend } from '../types';
 
 /* ─── Shared Output Panel ─── */
 interface OutputPanelProps {
@@ -1263,6 +1263,7 @@ interface Props {
   scanError?: string | null;
   onScanProject?: (path: string) => Promise<void>;
   knownIssuesCount?: number;
+  activeBackend?: ActiveBackend | null;
 }
 
 export function CommandCenter({
@@ -1278,6 +1279,7 @@ export function CommandCenter({
   scanError,
   onScanProject,
   knownIssuesCount = 0,
+  activeBackend,
 }: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
@@ -1338,12 +1340,35 @@ export function CommandCenter({
             Describe your task → get structured Claude Code prompts
           </p>
         </div>
-        {currentTask && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>Detected type:</span>
-            <TaskTypePill type={currentTask.taskType} size="md" />
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {activeBackend && (
+            <span
+              title={activeBackend.model ?? activeBackend.backend}
+              style={{
+                fontSize: '10px',
+                fontFamily: '"JetBrains Mono", monospace',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                border: '1px solid',
+                ...(activeBackend.backend === 'anthropic'
+                  ? { color: '#93c5fd', borderColor: '#1e3a5f', background: '#1e3a5f55' }
+                  : activeBackend.backend === 'ollama'
+                  ? { color: '#fb923c', borderColor: '#431407', background: '#43140755' }
+                  : { color: '#71717a', borderColor: '#27272a', background: '#27272a55' }),
+              }}
+            >
+              {activeBackend.backend === 'anthropic' && 'Claude API'}
+              {activeBackend.backend === 'ollama' && `Ollama · ${activeBackend.model?.split(':')[0] ?? 'local'}`}
+              {activeBackend.backend === 'script' && 'Script mode'}
+            </span>
+          )}
+          {currentTask && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>Detected type:</span>
+              <TaskTypePill type={currentTask.taskType} size="md" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>

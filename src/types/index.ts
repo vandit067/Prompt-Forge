@@ -37,6 +37,11 @@ export interface ScannedContext {
 
 export type OutputTab = 'prompts' | 'files' | 'plan' | 'checklist';
 
+export interface ActiveBackend {
+  backend: 'anthropic' | 'ollama' | 'script';
+  model: string | null;
+}
+
 export interface GeneratedPrompt {
   id: string;
   sessionLabel: string;

@@ -726,9 +726,16 @@ function scaffoldSession(input, features, stack) {
   const hasAuth = features.some(f => f.id === 'auth');
   const hasTheme = features.some(f => f.id === 'themes');
 
+  // Electron/Capacitor apps need Vite + React, not Next.js SSR
+  const needsVite = features.some(f => f.id === 'electron' || f.id === 'mobile');
+  const scaffoldCmd = needsVite
+    ? 'npm create vite@latest . -- --template react-ts'
+    : stack.scaffold;
+  const devUrl = needsVite ? 'http://localhost:5173' : 'http://localhost:3000';
+
   const steps = [
-    `${stack.scaffold}`,
-    `${pm} install — verify: ${pm} run dev → http://localhost:3000 loads`,
+    scaffoldCmd,
+    `${pm} install — verify: ${pm} run dev → ${devUrl} loads`,
   ];
 
   if (hasDB) {
@@ -758,7 +765,7 @@ function scaffoldSession(input, features, stack) {
         'No hardcoded credentials — all secrets via process.env + .env file',
         `Run \`${stack.typecheckCmd}\` after every file change`,
       ],
-      verification: [`${pm} run dev → http://localhost:3000 loads with sidebar nav`],
+      verification: [`${pm} run dev → ${devUrl} loads with sidebar nav`],
       isLast: false,
       nextSession: 'Session 2',
     }),
@@ -999,10 +1006,14 @@ function buildChecklist(features, stack) {
 // ── Title builder ─────────────────────────────────────────────────────────────
 
 function buildTitle(input) {
-  // Strip filler, capitalise, trim to 58 chars
+  // Strip filler verbs, capitalise, trim to nearest word boundary ≤58 chars
   let t = input.trim().replace(/^(build|create|make|add|implement|develop)\s+/i, '').replace(/[.!?]+$/, '').trim();
   t = t.charAt(0).toUpperCase() + t.slice(1);
-  if (t.length > 55) t = t.slice(0, 55) + '...';
+  if (t.length > 58) {
+    // Cut at last space before 55 chars to leave room for '…'
+    const cut = t.slice(0, 55).lastIndexOf(' ');
+    t = t.slice(0, cut > 20 ? cut : 55) + '…';
+  }
   return t;
 }
 

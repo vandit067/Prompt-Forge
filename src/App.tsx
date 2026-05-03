@@ -5,9 +5,9 @@ import { Analytics } from './screens/Analytics';
 import { Settings } from './screens/Settings';
 import { colors } from './lib/designSystem';
 import { api } from './lib/api';
-import { generateTask, scanProject, getFailureCount, CliNotInstalledError, GenerationCancelledError } from './services/claude-cli';
+import { scanProject, getFailureCount } from './services/claude-cli';
 import { classifyTask } from './data/generators';
-import type { Task, Screen, ScannedContext } from './types';
+import type { Task, Screen, ScannedContext, ActiveBackend } from './types';
 
 export default function App() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -15,18 +15,26 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [liveTask, setLiveTask] = useState<Task | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [dbReady, setDbReady] = useState(false);
-  const [cliError, setCliError] = useState<'not_installed' | 'generation_failed' | null>(null);
   const [scannedContext, setScannedContext] = useState<ScannedContext | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [knownIssuesCount, setKnownIssuesCount] = useState(0);
+  const [activeBackend, setActiveBackend] = useState<ActiveBackend | null>(null);
+  const [userRules, setUserRules] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     api.getTasks()
       .then(saved => { setTasks(saved); setDbReady(true); })
       .catch(() => setDbReady(true));
+    api.getBackend()
+      .then(setActiveBackend)
+      .catch(() => {});
+    api.getSettings()
+      .then(s => { if (s.userRules) try { setUserRules(JSON.parse(s.userRules)); } catch {} })
+      .catch(() => {});
   }, []);
 
   const selectedTask = tasks.find(t => t.id === selectedTaskId) ?? null;
@@ -38,14 +46,21 @@ export default function App() {
     }
   }
 
-  // Clicking a sidebar task navigates to task-detail view
+  // Clicking a sidebar task stays on command-center and shows output in tab panel
   function handleSelectTask(taskId: string) {
     setSelectedTaskId(taskId);
-    setCurrentScreen('task-detail');
+    setGenerateError(null);
+    setCurrentScreen('command-center');
   }
 
   function handleClearSelection() {
     setSelectedTaskId(null);
+    setGenerateError(null);
+  }
+
+  function handleCancel() {
+    abortRef.current?.abort();
+    setIsGenerating(false);
   }
 
   async function handleGenerate(input: string, projectPath?: string) {
@@ -56,45 +71,32 @@ export default function App() {
     setIsGenerating(true);
     setLiveTask(null);
     setSelectedTaskId(null);
+    setGenerateError(null);
     setCurrentScreen('command-center');
-    setCliError(null);
 
     try {
-      // Pre-classify to query failures before starting generation
       const taskType = classifyTask(input);
       console.log('Task type classified as:', taskType);
       const { count } = await getFailureCount(taskType);
       console.log('Failure count:', count);
       setKnownIssuesCount(count);
 
-      console.log('Calling generateTask...');
-      const task = await generateTask(input, projectPath, scannedContext, taskType, controller.signal);
-      console.log('Task generated:', task.id);
-      setTasks(prev => [task, ...prev]);
-      setLiveTask(task);
+      const newTask = await api.generate(input, taskType, projectPath, scannedContext, userRules);
+      setTasks(prev => [newTask, ...prev]);
+      setLiveTask(newTask);
+      setSelectedTaskId(newTask.id);
     } catch (err) {
-      if (err instanceof CliNotInstalledError) {
-        console.error('CLI not installed');
-        setCliError('not_installed');
-      } else if (err instanceof GenerationCancelledError) {
-        console.log('Generation cancelled');
-        // Silent cancel, don't show error
-      } else if (err instanceof Error && err.name === 'AbortError') {
-        console.log('Generation aborted');
-        // Silent abort, don't show error
+      if (err instanceof Error && err.name === 'AbortError') {
+        // Silent cancel
       } else {
-        setCliError('generation_failed');
+        const msg = err instanceof Error ? err.message : String(err);
+        setGenerateError(msg);
         console.error('Generation failed:', err);
       }
     } finally {
       setIsGenerating(false);
       abortRef.current = null;
     }
-  }
-
-  function handleCancel() {
-    abortRef.current?.abort();
-    setIsGenerating(false);
   }
 
   async function handleScanProject(path: string) {
@@ -147,6 +149,16 @@ export default function App() {
     }
   }
 
+  async function handleRefine(taskId: string, refinement: string) {
+    try {
+      const updated = await api.refine(taskId, refinement, userRules);
+      setTasks(prev => prev.map(t => t.id === taskId ? updated : t));
+      setLiveTask(updated);
+    } catch (err) {
+      console.error('Refinement failed:', err);
+    }
+  }
+
   function handleImport(importedTasks: Task[]) {
     setTasks(prev => {
       const existing = new Set(prev.map(t => t.id));
@@ -170,6 +182,8 @@ export default function App() {
             tasks={tasks}
             onImport={handleImport}
             onResetPatterns={handleResetPatterns}
+            userRules={userRules}
+            onRulesChange={setUserRules}
           />
         );
 
@@ -191,12 +205,13 @@ export default function App() {
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
             onCancel={handleCancel}
-            cliError={cliError}
-            onClearError={() => setCliError(null)}
+            generateError={generateError}
             scannedContext={scannedContext}
             isScanning={isScanning}
             scanError={scanError}
             onScanProject={handleScanProject}
+            onRefine={handleRefine}
+            activeBackend={activeBackend}
           />
         );
 
@@ -210,13 +225,14 @@ export default function App() {
             selectedTask={selectedTask}
             onClearSelection={handleClearSelection}
             onCancel={handleCancel}
-            cliError={cliError}
-            onClearError={() => setCliError(null)}
+            generateError={generateError}
             scannedContext={scannedContext}
             isScanning={isScanning}
             scanError={scanError}
             onScanProject={handleScanProject}
             knownIssuesCount={knownIssuesCount}
+            onRefine={handleRefine}
+            activeBackend={activeBackend}
           />
         );
     }

@@ -1,4 +1,4 @@
-import type { Task } from '../types';
+import type { Task, TaskType, ActiveBackend, ScannedContext } from '../types';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
@@ -38,4 +38,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(settings),
     }),
+
+  generate: (input: string, taskType: TaskType, projectPath?: string, projectContext?: ScannedContext | null, userRules?: string[]) =>
+    request<Task>('/api/generate', {
+      method: 'POST',
+      body: JSON.stringify({ input, taskType, projectPath, projectContext, userRules }),
+      signal: AbortSignal.timeout(180_000),
+    } as RequestInit),
+
+  refine: (taskId: string, refinement: string, userRules?: string[]) =>
+    request<Task>(`/api/tasks/${taskId}/refine`, {
+      method: 'POST',
+      body: JSON.stringify({ refinement, userRules }),
+      signal: AbortSignal.timeout(180_000),
+    } as RequestInit),
+
+  getBackend: () =>
+    request<ActiveBackend>('/api/backend'),
 };

@@ -25,6 +25,9 @@ export interface ScannedFile {
 export interface ScannedContext {
   projectPath: string;
   techStack: string[];
+  packageMgr?: string | null;
+  scripts?: Record<string, string>;
+  hooks?: string[];
   keyFiles: ScannedFile[];
   rules: string[];
   specPurpose?: string;
@@ -33,6 +36,11 @@ export interface ScannedContext {
 }
 
 export type OutputTab = 'prompts' | 'files' | 'plan' | 'checklist';
+
+export interface ActiveBackend {
+  backend: 'anthropic' | 'ollama' | 'script';
+  model: string | null;
+}
 
 export interface GeneratedPrompt {
   id: string;

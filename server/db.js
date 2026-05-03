@@ -68,6 +68,16 @@ export const stmts = {
 
   getTask: db.prepare(`SELECT * FROM tasks WHERE id = ?`),
 
+  updateTaskPrompts: db.prepare(`
+    UPDATE tasks
+    SET generated_prompts   = @generated_prompts,
+        generated_files     = @generated_files,
+        generated_plan      = @generated_plan,
+        generated_checklist = @generated_checklist,
+        updated_at          = @updated_at
+    WHERE id = @id
+  `),
+
   updateStatus: db.prepare(`
     UPDATE tasks SET status = @status, error_notes = @error_notes, updated_at = @updated_at
     WHERE id = @id

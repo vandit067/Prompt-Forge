@@ -137,6 +137,6 @@ export const styles = {
 };
 
 // Utility functions
-export function buildStyle(...styleObjects: (Record<string, any> | undefined)[]): React.CSSProperties {
-  return styleObjects.reduce((acc, obj) => ({ ...acc, ...obj }), {});
+export function buildStyle(...styleObjects: (Record<string, unknown> | undefined)[]): React.CSSProperties {
+  return styleObjects.reduce((acc, obj) => ({ ...acc, ...obj }), {}) as React.CSSProperties;
 }

@@ -1,9 +1,265 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List } from 'lucide-react';
+import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
-import type { Task, OutputTab, ProjectMode, ScannedContext } from '../types';
+import type { Task, OutputTab, ProjectMode, ScannedContext, ActiveBackend } from '../types';
+
+/* ─── Prompt Quality Scorer ─── */
+interface QualityScore {
+  pct: number;
+  grade: 'A' | 'B' | 'C' | 'D';
+  color: string;
+  breakdown: Array<{ label: string; pass: boolean; pts: number; max: number }>;
+}
+
+function scorePrompt(content: string, isLast: boolean): QualityScore {
+  const checks = [
+    { label: 'Context line',     max: 12, pass: /^Context:/m.test(content) },
+    { label: 'Scope + ONLY',     max: 10, pass: /^Scope: ONLY/m.test(content) },
+    { label: '3+ steps',         max: 15, pass: (content.match(/^\d+\./gm) || []).length >= 3 },
+    { label: 'Abort condition',  max: 10, pass: /STOP and report/i.test(content) },
+    { label: 'Verification',     max: 10, pass: /^Verification:/m.test(content) },
+    { label: 'Runnable command', max:  8, pass: /\b(curl|npm run|npx|pytest|go test|cargo test|mvn)\b/.test(content) },
+    { label: 'Constraints ≥2',  max:  8, pass: (content.match(/^- .+/gm) || []).length >= 2 },
+    { label: 'File paths',       max: 12, pass: /src\/[\w/.-]+\.(ts|tsx|js|py|go)/.test(content) },
+    ...(!isLast ? [{ label: 'Handoff note', max: 15, pass: /HANDOFF NOTE/.test(content) }] : []),
+  ];
+
+  const totalMax = checks.reduce((s, c) => s + c.max, 0);
+  const earned   = checks.filter(c => c.pass).reduce((s, c) => s + c.max, 0);
+  const pct      = Math.round((earned / totalMax) * 100);
+  const grade    = (pct >= 90 ? 'A' : pct >= 70 ? 'B' : pct >= 50 ? 'C' : 'D') as QualityScore['grade'];
+  const color    = pct >= 90 ? '#22c55e' : pct >= 70 ? '#3b82f6' : pct >= 50 ? '#f59e0b' : '#ef4444';
+  const breakdown = checks.map(c => ({ label: c.label, pass: c.pass, pts: c.pass ? c.max : 0, max: c.max }));
+
+  return { pct, grade, color, breakdown };
+}
+
+function QualityBadge({ score }: { score: QualityScore }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title={`Prompt quality: ${score.pct}% — click to see breakdown`}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '2px 7px',
+          borderRadius: '5px',
+          border: `1px solid ${score.color}33`,
+          background: `${score.color}18`,
+          color: score.color,
+          fontSize: '10px',
+          fontFamily: '"JetBrains Mono", monospace',
+          fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >
+        {score.grade}
+        <span style={{ fontWeight: 400, opacity: 0.8 }}>{score.pct}%</span>
+      </button>
+
+      {open && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            marginTop: '6px',
+            background: '#0f0f12',
+            border: '1px solid #27272a',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            zIndex: 10,
+            minWidth: '200px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          }}
+        >
+          <div style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', marginBottom: '8px', letterSpacing: '0.06em' }}>
+            QUALITY BREAKDOWN
+          </div>
+          {score.breakdown.map(item => (
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '5px' }}>
+              <span style={{ color: item.pass ? '#22c55e' : '#52525b', fontSize: '11px', width: '12px', flexShrink: 0 }}>
+                {item.pass ? '✓' : '✗'}
+              </span>
+              <span style={{ flex: 1, fontSize: '11px', color: item.pass ? '#a1a1aa' : '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+                {item.label}
+              </span>
+              <span style={{ fontSize: '10px', color: item.pass ? '#3b82f6' : '#3c3c48', fontFamily: '"JetBrains Mono", monospace' }}>
+                +{item.pts}/{item.max}
+              </span>
+            </div>
+          ))}
+          <div style={{ borderTop: '1px solid #1c1c22', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>Total</span>
+            <span style={{ fontSize: '11px', color: score.color, fontFamily: '"JetBrains Mono", monospace', fontWeight: 700 }}>{score.pct}%</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Export as Markdown ─── */
+function exportTaskMarkdown(task: Task): void {
+  const lines: string[] = [`# ${task.title}`, '', `**Type:** ${task.taskType}`, `**Created:** ${new Date(task.createdAt).toLocaleString()}`, ''];
+
+  if (task.generatedPrompts.length > 0) {
+    lines.push('## Prompts', '');
+    for (const p of task.generatedPrompts) {
+      lines.push(`### ${p.sessionLabel}`, '', '```', p.content, '```', '');
+    }
+  }
+
+  if (task.generatedFiles.length > 0) {
+    lines.push('## Supporting Files', '');
+    for (const f of task.generatedFiles) {
+      lines.push(`### ${f.filename}`, '', '```', f.content, '```', '');
+    }
+  }
+
+  if (task.generatedPlan.length > 0) {
+    lines.push('## Implementation Plan', '');
+    for (const s of task.generatedPlan) {
+      lines.push(`${s.session}. **${s.title}** (${s.estimatedTime})`, `   ${s.description}`, '');
+    }
+  }
+
+  if (task.generatedChecklist.length > 0) {
+    lines.push('## Verification Checklist', '');
+    for (const item of task.generatedChecklist) {
+      lines.push(`- [ ] ${item}`);
+    }
+    lines.push('');
+  }
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${task.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.md`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ─── Refinement Panel ─── */
+interface RefinementPanelProps {
+  task: Task;
+  onRefine: (taskId: string, refinement: string) => Promise<void>;
+}
+
+function RefinementPanel({ task, onRefine }: RefinementPanelProps) {
+  const [text, setText] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function handleRefine() {
+    if (!text.trim() || isRefining) return;
+    setIsRefining(true);
+    setDone(false);
+    try {
+      await onRefine(task.id, text.trim());
+      setText('');
+      setDone(true);
+      setTimeout(() => setDone(false), 3000);
+    } finally {
+      setIsRefining(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        background: '#0a0f1a',
+        border: '1px solid #1e3a5f',
+        borderRadius: '10px',
+        overflow: 'hidden',
+        marginTop: '8px',
+      }}
+    >
+      <div
+        style={{
+          padding: '8px 14px',
+          borderBottom: '1px solid #1e3a5f',
+          background: '#060d18',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '7px',
+        }}
+      >
+        <RefreshCw size={11} color="#60a5fa" />
+        <span style={{ fontSize: '11px', color: '#60a5fa', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+          Refine prompts
+        </span>
+        <span style={{ fontSize: '10px', color: '#3b4a63', fontFamily: '"JetBrains Mono", monospace' }}>
+          — regenerate with additional instructions
+        </span>
+      </div>
+      <div style={{ padding: '12px 14px', display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
+        <textarea
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleRefine(); }}
+          placeholder="e.g. Add error handling for network failures, make steps more granular, or split Session 2 into two sessions"
+          rows={2}
+          style={{
+            flex: 1,
+            background: '#0f1623',
+            border: '1px solid #1e3a5f',
+            borderRadius: '7px',
+            padding: '9px 12px',
+            color: '#fafafa',
+            fontSize: '12px',
+            fontFamily: '"Inter", system-ui, sans-serif',
+            lineHeight: '1.5',
+            resize: 'none',
+            outline: 'none',
+          }}
+          onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+          onBlur={e => (e.target.style.borderColor = '#1e3a5f')}
+        />
+        <button
+          onClick={handleRefine}
+          disabled={!text.trim() || isRefining}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px',
+            padding: '8px 14px',
+            borderRadius: '7px',
+            border: 'none',
+            background: done ? '#14532d' : (!text.trim() || isRefining ? '#1e3a5f55' : '#2563eb'),
+            color: done ? '#22c55e' : (!text.trim() || isRefining ? '#3b4a63' : '#fff'),
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: !text.trim() || isRefining ? 'not-allowed' : 'pointer',
+            whiteSpace: 'nowrap',
+            fontFamily: '"Inter", system-ui, sans-serif',
+            transition: 'all 0.12s',
+            flexShrink: 0,
+          }}
+        >
+          {done ? '✓ Done' : isRefining ? (
+            <>
+              <div style={{ width: '11px', height: '11px', border: '1.5px solid #3b4a63', borderTopColor: '#60a5fa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              Refining…
+            </>
+          ) : (
+            <>
+              <RefreshCw size={11} />
+              Refine
+            </>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /* ─── Shared Output Panel ─── */
 interface OutputPanelProps {
@@ -13,6 +269,17 @@ interface OutputPanelProps {
 
 function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>(defaultTab);
+  const [copiedAll, setCopiedAll] = useState(false);
+
+  function handleCopyAll() {
+    const all = task.generatedPrompts
+      .map((p, i) => `${'─'.repeat(60)}\n${p.sessionLabel}\n${'─'.repeat(60)}\n${p.content}`)
+      .join('\n\n');
+    navigator.clipboard.writeText(all).then(() => {
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 2000);
+    });
+  }
 
   const TABS: { id: OutputTab; label: string; icon: React.ReactNode; count: number }[] = [
     { id: 'prompts',   label: 'Prompts',   icon: <Zap size={13} />,        count: task.generatedPrompts.length },
@@ -34,61 +301,91 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
       <div
         style={{
           display: 'flex',
+          alignItems: 'center',
           borderBottom: `1px solid ${colors.border}`,
           background: colors.bgMuted,
           padding: `0 ${space.xs}`,
         }}
       >
-        {TABS.map(tab => (
+        <div style={{ display: 'flex', flex: 1 }}>
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: space.sm,
+                padding: `11px ${space.md}`,
+                border: 'none',
+                borderBottom: activeTab === tab.id ? `2px solid ${colors.blue}` : '2px solid transparent',
+                background: 'transparent',
+                color: activeTab === tab.id ? colors.fg : colors.fgMuted,
+                fontSize: '12px',
+                fontFamily: fonts.sans,
+                fontWeight: activeTab === tab.id ? 500 : 400,
+                cursor: 'pointer',
+                transition: `color ${transitions.fast}`,
+                marginBottom: '-1px',
+              }}
+              onMouseEnter={e => {
+                if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
+              }}
+              onMouseLeave={e => {
+                if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgMuted;
+              }}
+            >
+              {tab.icon}
+              {tab.label}
+              <span
+                style={{
+                  padding: '1px 5px',
+                  borderRadius: radius.sm,
+                  background: activeTab === tab.id ? colors.blueBg : colors.bgInput,
+                  color: activeTab === tab.id ? colors.blueLight : colors.fgDim,
+                  fontSize: '10px',
+                  fontFamily: fonts.mono,
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+        {/* Copy all — only shown on prompts tab with multiple sessions */}
+        {activeTab === 'prompts' && task.generatedPrompts.length > 1 && (
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={handleCopyAll}
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: space.sm,
-              padding: `11px ${space.md}`,
-              border: 'none',
-              borderBottom: activeTab === tab.id ? `2px solid ${colors.blue}` : '2px solid transparent',
-              background: 'transparent',
-              color: activeTab === tab.id ? colors.fg : colors.fgMuted,
-              fontSize: '12px',
-              fontFamily: fonts.sans,
-              fontWeight: activeTab === tab.id ? 500 : 400,
+              gap: '5px',
+              padding: '5px 10px',
+              marginRight: '8px',
+              borderRadius: '5px',
+              border: `1px solid ${copiedAll ? '#14532d' : '#27272a'}`,
+              background: copiedAll ? '#0d1f0d' : 'transparent',
+              color: copiedAll ? '#22c55e' : '#71717a',
+              fontSize: '10px',
+              fontFamily: '"JetBrains Mono", monospace',
               cursor: 'pointer',
-              transition: `color ${transitions.fast}`,
-              marginBottom: '-1px',
-            }}
-            onMouseEnter={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
-            }}
-            onMouseLeave={e => {
-              if (activeTab !== tab.id) (e.currentTarget as HTMLButtonElement).style.color = colors.fgMuted;
+              transition: 'all 0.12s',
+              whiteSpace: 'nowrap',
             }}
           >
-            {tab.icon}
-            {tab.label}
-            <span
-              style={{
-                padding: '1px 5px',
-                borderRadius: radius.sm,
-                background: activeTab === tab.id ? colors.blueBg : colors.bgInput,
-                color: activeTab === tab.id ? colors.blueLight : colors.fgDim,
-                fontSize: '10px',
-                fontFamily: fonts.mono,
-              }}
-            >
-              {tab.count}
-            </span>
+            {copiedAll ? '✓ Copied' : `Copy all ${task.generatedPrompts.length}`}
           </button>
-        ))}
+        )}
       </div>
 
       {/* Tab content */}
-      <div style={{ flex: 1, padding: space.lg, overflowY: 'auto' }}>
+      <div style={{ padding: space.lg }}>
         {activeTab === 'prompts' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: space.lg }}>
-            {task.generatedPrompts.map((prompt) => (
+            {task.generatedPrompts.map((prompt, idx) => {
+              const isLast = idx === task.generatedPrompts.length - 1;
+              const score = scorePrompt(prompt.content, isLast);
+              return (
               <div
                 key={prompt.id}
                 style={{
@@ -119,7 +416,10 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
                   >
                     {prompt.sessionLabel}
                   </span>
-                  <CopyButton text={prompt.content} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <QualityBadge score={score} />
+                    <CopyButton text={prompt.content} />
+                  </div>
                 </div>
                 {/* Prompt body */}
                 <pre
@@ -138,7 +438,8 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
                   {prompt.content}
                 </pre>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -1249,6 +1550,186 @@ function ChecklistTab() {
   );
 }
 
+/* ─── Clarifying Questions ─── */
+
+interface ClarifyQuestion {
+  id: string;
+  label: string;
+  placeholder: string;
+  optional?: boolean;
+}
+
+const STACKTRACE_RE = /at\s+[\w.<>\[\] /]+\s+\(.*?:\d+:\d+\)|Traceback \(most recent call last\):|at\s+[\w.$]+\.[\w$]+\([\w.]+:\d+\)/;
+
+function analyzeForClarification(input: string): ClarifyQuestion[] {
+  // Stack traces are self-describing — no clarification needed
+  if (STACKTRACE_RE.test(input)) return [];
+
+  const questions: ClarifyQuestion[] = [];
+
+  const hasStack = /\b(react|next\.?js|vue|angular|svelte|django|fastapi|flask|rails|express|node\.?js|laravel|spring|flutter|kotlin|swift|rust|go\b|golang|python)\b/i.test(input);
+  if (!hasStack && input.length > 50) {
+    questions.push({
+      id: 'stack',
+      label: 'What tech stack?',
+      placeholder: 'e.g. Next.js + TypeScript, Django + React, or Node.js CLI',
+    });
+  }
+
+  const mentionsUsers = /\b(user|account|dashboard|admin|login|auth|member|role)\b/i.test(input);
+  const hasAuthClarity = /\b(no auth|public|open|nextauth|firebase auth|supabase|clerk|no login|auth0)\b/i.test(input);
+  if (mentionsUsers && !hasAuthClarity && questions.length < 2) {
+    questions.push({
+      id: 'auth',
+      label: 'Authentication approach?',
+      placeholder: 'e.g. NextAuth + Google, Supabase Auth, or none',
+      optional: true,
+    });
+  }
+
+  if (input.length > 80 && questions.length < 2) {
+    const hasConstraints = /\b(offline|no paid|free.?tier|no api key|local.?only|deadline|ship in|within \d|self.?host)\b/i.test(input);
+    if (!hasConstraints) {
+      questions.push({
+        id: 'constraints',
+        label: 'Any constraints?',
+        placeholder: 'e.g. no paid APIs, must work offline, ship in 2 days',
+        optional: true,
+      });
+    }
+  }
+
+  return questions.slice(0, 2);
+}
+
+function buildEnrichedInput(baseInput: string, answers: Record<string, string>): string {
+  const extras = Object.entries(answers)
+    .filter(([, v]) => v.trim())
+    .map(([k, v]) => {
+      if (k === 'stack') return `Stack: ${v}`;
+      if (k === 'auth') return `Auth approach: ${v}`;
+      if (k === 'constraints') return `Constraints: ${v}`;
+      return `${k}: ${v}`;
+    });
+  if (extras.length === 0) return baseInput;
+  return `${baseInput}\n\nAdditional context:\n${extras.map(e => `- ${e}`).join('\n')}`;
+}
+
+interface ClarifyPanelProps {
+  questions: ClarifyQuestion[];
+  answers: Record<string, string>;
+  onAnswer: (id: string, value: string) => void;
+  onConfirm: () => void;
+  onSkip: () => void;
+}
+
+function ClarifyPanel({ questions, answers, onAnswer, onConfirm, onSkip }: ClarifyPanelProps) {
+  return (
+    <div
+      style={{
+        background: '#0d1828',
+        border: '1px solid #1e3a5f',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        animation: 'slideDown 0.15s ease-out',
+      }}
+    >
+      <style>{`@keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <div
+        style={{
+          padding: '10px 14px',
+          borderBottom: '1px solid #1e3a5f',
+          background: '#0a1020',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
+        <span style={{ fontSize: '11px', color: '#93c5fd', fontFamily: '"JetBrains Mono", monospace', fontWeight: 600 }}>
+          Quick questions
+        </span>
+        <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+          — helps generate better prompts
+        </span>
+      </div>
+      <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {questions.map(q => (
+          <div key={q.id}>
+            <label
+              style={{
+                display: 'block',
+                fontSize: '11px',
+                color: '#a1a1aa',
+                fontFamily: '"JetBrains Mono", monospace',
+                marginBottom: '6px',
+              }}
+            >
+              {q.label}
+              {q.optional && (
+                <span style={{ color: '#52525b', marginLeft: '6px' }}>optional</span>
+              )}
+            </label>
+            <input
+              value={answers[q.id] || ''}
+              onChange={e => onAnswer(q.id, e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') onConfirm(); }}
+              placeholder={q.placeholder}
+              style={{
+                width: '100%',
+                background: '#18181b',
+                border: '1px solid #27272a',
+                borderRadius: '6px',
+                padding: '8px 10px',
+                color: '#fafafa',
+                fontSize: '13px',
+                fontFamily: '"Inter", system-ui, sans-serif',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+              onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+              onBlur={e => (e.target.style.borderColor = '#27272a')}
+              autoFocus={q === questions[0]}
+            />
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: '8px', paddingTop: '2px' }}>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '7px 16px',
+              borderRadius: '7px',
+              border: 'none',
+              background: '#22c55e',
+              color: '#000',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: '"Inter", system-ui, sans-serif',
+            }}
+          >
+            Generate
+          </button>
+          <button
+            onClick={onSkip}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '7px',
+              border: '1px solid #27272a',
+              background: 'transparent',
+              color: '#71717a',
+              fontSize: '12px',
+              cursor: 'pointer',
+              fontFamily: '"Inter", system-ui, sans-serif',
+            }}
+          >
+            Skip
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Command Center ─── */
 interface Props {
   onGenerate: (input: string, projectPath?: string) => Promise<void>;
@@ -1257,13 +1738,14 @@ interface Props {
   selectedTask: Task | null;
   onClearSelection: () => void;
   onCancel?: () => void;
-  cliError?: 'not_installed' | 'generation_failed' | null;
-  onClearError?: () => void;
+  generateError?: string | null;
   scannedContext?: ScannedContext | null;
   isScanning?: boolean;
   scanError?: string | null;
   onScanProject?: (path: string) => Promise<void>;
   knownIssuesCount?: number;
+  activeBackend?: ActiveBackend | null;
+  onRefine?: (taskId: string, refinement: string) => Promise<void>;
 }
 
 export function CommandCenter({
@@ -1273,20 +1755,23 @@ export function CommandCenter({
   selectedTask,
   onClearSelection,
   onCancel,
-  cliError,
-  onClearError,
+  generateError,
   scannedContext,
   isScanning,
   scanError,
   onScanProject,
   knownIssuesCount = 0,
+  activeBackend,
+  onRefine,
 }: Props) {
   const [input, setInput] = useState('');
   const [projectMode, setProjectMode] = useState<ProjectMode>('new');
   const [projectPath, setProjectPath] = useState('/Users/you/my-project');
   const [activeTab, setActiveTab] = useState<OutputTab>('prompts');
+  const [clarifyState, setClarifyState] = useState<'idle' | 'asking'>('idle');
+  const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
+  const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -1296,42 +1781,31 @@ export function CommandCenter({
     el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   }, [input]);
 
-  // Auto-focus textarea and clear input after generation
-  useEffect(() => {
-    if (!isGenerating && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [isGenerating]);
+  function doGenerate(baseInput: string, answers: Record<string, string>) {
+    const enriched = buildEnrichedInput(baseInput, answers);
+    setClarifyState('idle');
+    setClarifyQuestions([]);
+    setClarifyAnswers({});
+    onGenerate(enriched, projectMode === 'existing' ? projectPath : undefined);
+    setInput('');
+  }
 
   function handleSubmit() {
-    console.log('handleSubmit called', { input: input.trim(), isGenerating });
-    if (!input.trim() || isGenerating) {
-      console.log('Skipping: no input or already generating');
-      return;
+    if (!input.trim() || isGenerating) return;
+    if (clarifyState === 'idle') {
+      const questions = analyzeForClarification(input.trim());
+      if (questions.length > 0) {
+        setClarifyQuestions(questions);
+        setClarifyAnswers({});
+        setClarifyState('asking');
+        return;
+      }
     }
-    console.log('Calling onGenerate with:', { input: input.trim(), projectPath: projectMode === 'existing' ? projectPath : undefined });
-    onGenerate(input.trim(), projectMode === 'existing' ? projectPath : undefined);
-    setInput('');
+    doGenerate(input.trim(), clarifyAnswers);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleSubmit();
-  }
-
-  function handleSelectFolder() {
-    folderInputRef.current?.click();
-  }
-
-  function handleFolderChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.currentTarget.files;
-    if (files && files.length > 0) {
-      const firstFilePath = files[0].webkitRelativePath || files[0].name;
-      const folderPath = firstFilePath.split('/')[0];
-      setProjectPath(folderPath);
-      if (onScanProject) {
-        onScanProject(folderPath);
-      }
-    }
   }
 
   const TABS: { id: OutputTab; label: string; icon: React.ReactNode }[] = [
@@ -1369,12 +1843,35 @@ export function CommandCenter({
             Describe your task → get structured Claude Code prompts
           </p>
         </div>
-        {currentTask && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>Detected type:</span>
-            <TaskTypePill type={currentTask.taskType} size="md" />
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {activeBackend && (
+            <span
+              title={activeBackend.model ?? activeBackend.backend}
+              style={{
+                fontSize: '10px',
+                fontFamily: '"JetBrains Mono", monospace',
+                padding: '3px 8px',
+                borderRadius: '4px',
+                border: '1px solid',
+                ...(activeBackend.backend === 'anthropic'
+                  ? { color: '#93c5fd', borderColor: '#1e3a5f', background: '#1e3a5f55' }
+                  : activeBackend.backend === 'ollama'
+                  ? { color: '#fb923c', borderColor: '#431407', background: '#43140755' }
+                  : { color: '#71717a', borderColor: '#27272a', background: '#27272a55' }),
+              }}
+            >
+              {activeBackend.backend === 'anthropic' && 'Claude API'}
+              {activeBackend.backend === 'ollama' && `Ollama · ${activeBackend.model?.split(':')[0] ?? 'local'}`}
+              {activeBackend.backend === 'script' && 'Script mode'}
+            </span>
+          )}
+          {currentTask && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>Detected type:</span>
+              <TaskTypePill type={currentTask.taskType} size="md" />
+            </div>
+          )}
+        </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1411,182 +1908,200 @@ export function CommandCenter({
               fontFamily: '"Inter", system-ui, sans-serif',
               lineHeight: '1.6',
               display: 'block',
-              verticalAlign: 'top',
             }}
           />
-        </div>
 
-        {/* Controls bar — separate from textarea */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '12px 0',
-          }}
-        >
-          {/* Project mode toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
-            <div
-              style={{
-                display: 'flex',
-                background: colors.bgInput,
-                border: `1px solid ${colors.border}`,
-                borderRadius: radius.md,
-                padding: space.xs,
-                gap: space.xs,
-              }}
-            >
-              {(['new', 'existing'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setProjectMode(mode)}
-                  style={{
-                    padding: `${space.xs} ${space.md}`,
-                    borderRadius: radius.sm,
-                    border: projectMode === mode ? `1px solid ${colors.blue}` : '1px solid transparent',
-                    background: projectMode === mode ? colors.blueBg : colors.bgInput,
-                    color: projectMode === mode ? colors.blueLight : colors.fgHover,
-                    fontSize: '11px',
-                    fontFamily: fonts.sans,
-                    fontWeight: projectMode === mode ? 600 : 500,
-                    cursor: 'pointer',
-                    transition: transitions.fast,
-                  }}
-                  onMouseEnter={e => {
-                    if (projectMode !== mode) {
-                      (e.currentTarget as HTMLButtonElement).style.background = colors.borderLight;
-                      (e.currentTarget as HTMLButtonElement).style.color = colors.fg;
-                    }
-                  }}
-                  onMouseLeave={e => {
-                    if (projectMode !== mode) {
-                      (e.currentTarget as HTMLButtonElement).style.background = colors.bgInput;
-                      (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
-                    }
-                  }}
-                >
-                  {mode === 'new' ? 'New Project' : 'Existing Project'}
-                </button>
-              ))}
-            </div>
-
-            {projectMode === 'existing' && (
+          {/* Bottom bar */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderTop: '1px solid #1c1c22',
+              background: '#0a0a0d',
+            }}
+          >
+            {/* Project mode toggle */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: space.sm }}>
               <div
                 style={{
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  background: '#18181b',
-                  border: '1px solid #1c1c22',
-                  borderRadius: '6px',
-                  padding: '4px 10px',
+                  background: colors.bgInput,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: radius.md,
+                  padding: space.xs,
+                  gap: space.xs,
                 }}
               >
-                <FolderOpen size={12} color="#71717a" />
-                <span
+                {(['new', 'existing'] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setProjectMode(mode)}
+                    style={{
+                      padding: `${space.xs} ${space.md}`,
+                      borderRadius: radius.sm,
+                      border: projectMode === mode ? `1px solid ${colors.blue}` : '1px solid transparent',
+                      background: projectMode === mode ? colors.blueBg : colors.bgInput,
+                      color: projectMode === mode ? colors.blueLight : colors.fgHover,
+                      fontSize: '11px',
+                      fontFamily: fonts.sans,
+                      fontWeight: projectMode === mode ? 600 : 500,
+                      cursor: 'pointer',
+                      transition: transitions.fast,
+                    }}
+                    onMouseEnter={e => {
+                      if (projectMode !== mode) {
+                        (e.currentTarget as HTMLButtonElement).style.background = colors.borderLight;
+                        (e.currentTarget as HTMLButtonElement).style.color = colors.fg;
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (projectMode !== mode) {
+                        (e.currentTarget as HTMLButtonElement).style.background = colors.bgInput;
+                        (e.currentTarget as HTMLButtonElement).style.color = colors.fgHover;
+                      }
+                    }}
+                  >
+                    {mode === 'new' ? 'New Project' : 'Existing Project'}
+                  </button>
+                ))}
+              </div>
+
+              {projectMode === 'existing' && (
+                <div
                   style={{
-                    fontSize: '11px',
-                    fontFamily: '"JetBrains Mono", monospace',
-                    color: '#a1a1aa',
-                    maxWidth: '200px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#18181b',
+                    border: '1px solid #1c1c22',
+                    borderRadius: '6px',
+                    padding: '4px 10px',
                   }}
                 >
-                  {projectPath}
-                </span>
-                <button
-                  onClick={handleSelectFolder}
-                  style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '10px', cursor: 'pointer', padding: 0 }}
-                >
-                  browse
-                </button>
-              </div>
-            )}
-          </div>
+                  <FolderOpen size={12} color="#71717a" />
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontFamily: '"JetBrains Mono", monospace',
+                      color: '#a1a1aa',
+                      maxWidth: '200px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {projectPath}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const p = window.prompt('Enter project path:', projectPath);
+                      if (p) {
+                        setProjectPath(p);
+                        onScanProject?.(p);
+                      }
+                    }}
+                    style={{ background: 'none', border: 'none', color: '#3b82f6', fontSize: '10px', cursor: 'pointer', padding: 0 }}
+                  >
+                    change
+                  </button>
+                </div>
+              )}
+            </div>
 
-          {/* Submit / Cancel */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {!isGenerating && (
-              <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
-                ⌘↵
-              </span>
-            )}
-            {isGenerating && onCancel ? (
-              <button
-                onClick={onCancel}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 16px',
-                  borderRadius: '7px',
-                  border: 'none',
-                  background: '#dc2626',
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.12s',
-                  fontFamily: '"Inter", system-ui, sans-serif',
-                }}
-              >
-                Cancel
-              </button>
-            ) : (
-              <button
-                onClick={handleSubmit}
-                disabled={!input.trim() || isGenerating}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 16px',
-                  borderRadius: '7px',
-                  border: 'none',
-                  background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
-                  color: !input.trim() || isGenerating ? '#52525b' : '#000',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.12s',
-                  fontFamily: '"Inter", system-ui, sans-serif',
-                }}
-              >
-                {isGenerating ? (
-                  <>
-                    <div
-                      style={{
-                        width: '12px',
-                        height: '12px',
-                        border: '1.5px solid #52525b',
-                        borderTopColor: '#22c55e',
-                        borderRadius: '50%',
-                        animation: 'spin 0.8s linear infinite',
-                      }}
-                    />
-                    Generating…
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                  </>
-                ) : (
-                  <>
-                    <Send size={13} />
-                    Generate
-                  </>
-                )}
-              </button>
-            )}
+            {/* Submit / Cancel */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {!isGenerating && (
+                <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace' }}>
+                  ⌘↵
+                </span>
+              )}
+              {isGenerating && onCancel ? (
+                <button
+                  onClick={onCancel}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: '#dc2626',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.12s',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                  }}
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  disabled={!input.trim() || isGenerating}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    borderRadius: '7px',
+                    border: 'none',
+                    background: !input.trim() || isGenerating ? '#14532d66' : '#22c55e',
+                    color: !input.trim() || isGenerating ? '#52525b' : '#000',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: !input.trim() || isGenerating ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.12s',
+                    fontFamily: '"Inter", system-ui, sans-serif',
+                  }}
+                >
+                  {isGenerating ? (
+                    <>
+                      <div
+                        style={{
+                          width: '12px',
+                          height: '12px',
+                          border: '1.5px solid #52525b',
+                          borderTopColor: '#22c55e',
+                          borderRadius: '50%',
+                          animation: 'spin 0.8s linear infinite',
+                        }}
+                      />
+                      Generating…
+                      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={13} />
+                      Generate
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* Clarifying questions panel */}
+        {clarifyState === 'asking' && (
+          <ClarifyPanel
+            questions={clarifyQuestions}
+            answers={clarifyAnswers}
+            onAnswer={(id, value) => setClarifyAnswers(prev => ({ ...prev, [id]: value }))}
+            onConfirm={() => doGenerate(input.trim(), clarifyAnswers)}
+            onSkip={() => doGenerate(input.trim(), {})}
+          />
+        )}
 
         {/* Project context (when existing mode) */}
         {projectMode === 'existing' && (
           <ProjectContextCard
-            scannedContext={scannedContext}
-            isScanning={isScanning}
-            scanError={scanError}
+            scannedContext={scannedContext ?? null}
+            isScanning={isScanning ?? false}
+            scanError={scanError ?? null}
             projectPath={projectPath}
             onRescan={() => onScanProject?.(projectPath)}
           />
@@ -1614,17 +2129,26 @@ export function CommandCenter({
           </div>
         )}
 
-        {/* CLI Error Banners */}
-        {cliError === 'not_installed' && onClearError && (
-          <CliNotInstalledBanner onDismiss={onClearError} />
-        )}
-        {cliError === 'generation_failed' && onClearError && (
-          <GenerationErrorBanner onDismiss={onClearError} />
-        )}
-
         {/* Tabbed output panel — always visible */}
         {isGenerating ? (
           <GeneratingState />
+        ) : generateError ? (
+          <div
+            style={{
+              background: '#1a0a0a',
+              border: '1px solid #5f1d1d',
+              borderRadius: '12px',
+              padding: '20px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600, color: '#fca5a5', fontFamily: '"JetBrains Mono", monospace' }}>
+              Generation failed
+            </span>
+            <span style={{ fontSize: '12px', color: '#a1a1aa', lineHeight: '1.5' }}>{generateError}</span>
+          </div>
         ) : selectedTask ? (
           /* ── Selected task: show real output ── */
           <div>
@@ -1659,6 +2183,30 @@ export function CommandCenter({
                 {new Date(selectedTask.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </span>
               <button
+                onClick={() => exportTaskMarkdown(selectedTask)}
+                title="Export as Markdown"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  background: 'none',
+                  border: '1px solid #27272a',
+                  color: '#71717a',
+                  cursor: 'pointer',
+                  padding: '3px 8px',
+                  borderRadius: '5px',
+                  fontSize: '10px',
+                  fontFamily: '"JetBrains Mono", monospace',
+                  flexShrink: 0,
+                  transition: 'all 0.12s',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = '#a1a1aa'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#3f3f46'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = '#71717a'; (e.currentTarget as HTMLButtonElement).style.borderColor = '#27272a'; }}
+              >
+                <Download size={10} />
+                .md
+              </button>
+              <button
                 onClick={onClearSelection}
                 title="Close"
                 style={{
@@ -1679,6 +2227,7 @@ export function CommandCenter({
               </button>
             </div>
             <OutputPanel task={selectedTask} />
+            {onRefine && <RefinementPanel task={selectedTask} onRefine={onRefine} />}
           </div>
         ) : (
           /* ── Default demo: hardcoded fake tabs ── */
@@ -1744,15 +2293,6 @@ export function CommandCenter({
           </div>
         )}
       </div>
-
-      {/* Hidden folder picker */}
-      <input
-        ref={folderInputRef}
-        type="file"
-        onChange={handleFolderChange}
-        style={{ display: 'none' }}
-        {...({ webkitdirectory: 'true' } as any)}
-      />
     </div>
   );
 }

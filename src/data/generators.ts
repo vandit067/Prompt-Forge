@@ -1,6 +1,13 @@
 import type { Task, TaskType, GeneratedPrompt, GeneratedFile, PlanStep } from '../types';
 
 export function classifyTask(input: string): TaskType {
+  // Stack trace patterns take priority — detect before keyword matching
+  if (
+    /at\s+[\w.<>\[\] /]+\s+\(.*?:\d+:\d+\)/.test(input) ||   // JS/TS frame
+    /Traceback \(most recent call last\):/.test(input) ||       // Python
+    /at\s+[\w.$]+\.[\w$]+\([\w.]+:\d+\)/.test(input)          // JVM
+  ) return 'BUG_FIX';
+
   const lower = input.toLowerCase();
   if (/\b(build|create|scaffold|make a tool|new app|new dashboard|new system|write a tool|build me)\b/.test(lower)) return 'NEW_TOOL';
   if (/\b(not working|broken|error|crash|bug|fix|fails|doesn'?t work|won'?t work|issue with|breaking)\b/.test(lower)) return 'BUG_FIX';

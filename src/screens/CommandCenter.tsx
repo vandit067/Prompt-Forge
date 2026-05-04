@@ -1771,6 +1771,9 @@ export function CommandCenter({
   const [clarifyState, setClarifyState] = useState<'idle' | 'asking'>('idle');
   const [clarifyQuestions, setClarifyQuestions] = useState<ClarifyQuestion[]>([]);
   const [clarifyAnswers, setClarifyAnswers] = useState<Record<string, string>>({});
+  const [savedDraft, setSavedDraft] = useState<string | null>(() =>
+    localStorage.getItem('prompt-forge-draft')
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -1781,6 +1784,31 @@ export function CommandCenter({
     el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   }, [input]);
 
+  // Auto-save draft (debounced)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (input.trim()) {
+        localStorage.setItem('prompt-forge-draft', input);
+      } else {
+        localStorage.removeItem('prompt-forge-draft');
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [input]);
+
+  // Restore or dismiss draft
+  function restoreDraft() {
+    if (savedDraft) {
+      setInput(savedDraft);
+      setSavedDraft(null);
+    }
+  }
+
+  function dismissDraft() {
+    localStorage.removeItem('prompt-forge-draft');
+    setSavedDraft(null);
+  }
+
   function doGenerate(baseInput: string, answers: Record<string, string>) {
     const enriched = buildEnrichedInput(baseInput, answers);
     setClarifyState('idle');
@@ -1788,6 +1816,8 @@ export function CommandCenter({
     setClarifyAnswers({});
     onGenerate(enriched, projectMode === 'existing' ? projectPath : undefined);
     setInput('');
+    localStorage.removeItem('prompt-forge-draft');
+    setSavedDraft(null);
   }
 
   function handleSubmit() {
@@ -1875,6 +1905,76 @@ export function CommandCenter({
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+        {/* Draft restore banner */}
+        {savedDraft && !input && (
+          <div
+            style={{
+              background: '#78350f',
+              border: `1px solid #92400e`,
+              borderRadius: radius.lg,
+              padding: `12px 16px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+            }}
+          >
+            <span style={{ fontSize: '13px', color: '#fef3c7', fontWeight: 500 }}>
+              📝 You have an unsaved draft
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={restoreDraft}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: radius.sm,
+                  border: '1px solid #b45309',
+                  background: '#b45309',
+                  color: '#fef3c7',
+                  fontSize: '12px',
+                  fontFamily: fonts.sans,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: transitions.fast,
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#d97706';
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#d97706';
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#b45309';
+                  (e.currentTarget as HTMLButtonElement).style.borderColor = '#b45309';
+                }}
+              >
+                Restore
+              </button>
+              <button
+                onClick={dismissDraft}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: radius.sm,
+                  border: `1px solid #92400e`,
+                  background: 'transparent',
+                  color: '#fcd34d',
+                  fontSize: '12px',
+                  fontFamily: fonts.sans,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: transitions.fast,
+                }}
+                onMouseEnter={e => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#78350f';
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Input area */}
         <div

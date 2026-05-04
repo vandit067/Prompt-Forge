@@ -52,9 +52,13 @@ async function detectActiveBackend() {
   return { backend: 'script', model: null };
 }
 
-// Resolved once at startup via top-level await
-const activeBackend = await detectActiveBackend();
-console.log(`[backend] ${activeBackend.backend}${activeBackend.model ? ` · ${activeBackend.model}` : ''}`);
+// Initialize backend state (resolved when startServer is called)
+let activeBackend = { backend: 'script', model: null };
+
+async function initServer() {
+  activeBackend = await detectActiveBackend();
+  console.log(`[backend] ${activeBackend.backend}${activeBackend.model ? ` · ${activeBackend.model}` : ''}`);
+}
 
 // ── System prompt (static — qualifies for prompt caching) ─────────────────────
 const SYSTEM_PROMPT = `You are Prompt Forge, an expert orchestrator for Claude Code and AI coding agents.
@@ -685,4 +689,33 @@ app.post('/api/settings', (req, res) => {
 });
 
 const PORT = 3001;
-app.listen(PORT, () => console.log(`API server → http://localhost:${PORT}`));
+let httpServer = null;
+
+export async function startServer() {
+  await initServer();
+  return new Promise((resolve) => {
+    httpServer = app.listen(PORT, () => {
+      console.log(`API server → http://localhost:${PORT}`);
+      resolve(httpServer);
+    });
+  });
+}
+
+export function stopServer() {
+  return new Promise((resolve) => {
+    if (httpServer) {
+      httpServer.close(resolve);
+    } else {
+      resolve();
+    }
+  });
+}
+
+// Standalone mode: if run directly (not imported as module), start the server
+if (!process.env.ELECTRON_USER_DATA) {
+  startServer();
+  process.on('SIGINT', async () => {
+    await stopServer();
+    process.exit(0);
+  });
+}

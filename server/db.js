@@ -3,8 +3,17 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { mkdirSync } from 'fs';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = join(__dirname, '..', 'data');
+const DATA_DIR = process.env.ELECTRON_USER_DATA
+  ? process.env.ELECTRON_USER_DATA
+  : (() => {
+      try {
+        const __dirname = dirname(fileURLToPath(import.meta.url));
+        return join(__dirname, '..', 'data');
+      } catch {
+        // Fallback for bundled CJS where import.meta.url is unavailable
+        return join(process.cwd(), 'data');
+      }
+    })();
 mkdirSync(DATA_DIR, { recursive: true });
 
 const db = new Database(join(DATA_DIR, 'prompt-forge.db'));

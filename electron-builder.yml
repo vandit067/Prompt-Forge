@@ -1,0 +1,35 @@
+appId: com.promptforge.app
+productName: Prompt Forge
+copyright: Copyright © 2026
+
+directories:
+  output: release
+
+files:
+  - dist/**
+  - electron/main.cjs
+  - electron/preload.js
+  - node_modules/**
+  - package.json
+
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**
+  - node_modules/bindings/**
+  - node_modules/file-uri-to-path/**
+
+mac:
+  category: public.app-category.developer-tools
+  icon: assets/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+
+dmg:
+  title: "Prompt Forge ${version}"
+
+npmRebuild: true

@@ -43,21 +43,43 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'success' | 'error'>('all');
   const [typeFilter, setTypeFilter] = useState<TaskType | 'all'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
 
   const filtered = tasks.filter(t => {
-    const matchesSearch = search === '' || t.title.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = search === '' ||
+      t.title.toLowerCase().includes(search.toLowerCase()) ||
+      t.input.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || t.status === statusFilter;
     const matchesType = typeFilter === 'all' || t.taskType === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
+
+    const matchesDate = (() => {
+      if (dateFilter === 'all') return true;
+      const now = new Date();
+      const created = new Date(t.createdAt);
+      if (dateFilter === 'today') return created.toDateString() === now.toDateString();
+      if (dateFilter === 'week') return (now.getTime() - created.getTime()) < 7 * 86400000;
+      if (dateFilter === 'month') return (now.getTime() - created.getTime()) < 30 * 86400000;
+      return true;
+    })();
+
+    return matchesSearch && matchesStatus && matchesType && matchesDate;
   });
+
+  const sorted = [...filtered].sort((a, b) =>
+    sortOrder === 'newest'
+      ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
 
   function clearFilters() {
     setSearch('');
     setStatusFilter('all');
     setTypeFilter('all');
+    setDateFilter('all');
   }
 
-  const hasActiveFilter = search !== '' || statusFilter !== 'all' || typeFilter !== 'all';
+  const hasActiveFilter = search !== '' || statusFilter !== 'all' || typeFilter !== 'all' || dateFilter !== 'all';
 
   return (
     <aside
@@ -269,19 +291,67 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
         </div>
       </div>
 
+      {/* Date filter */}
+      <div style={{ padding: '8px 12px', borderBottom: `1px solid ${colors.border}`, flexShrink: 0, overflowX: 'auto' }}>
+        <div style={{ display: 'flex', gap: '4px', minWidth: 'min-content' }}>
+          {(['all', 'today', 'week', 'month'] as const).map(date => {
+            const labels = { all: 'All time', today: 'Today', week: 'This week', month: 'This month' };
+            const active = dateFilter === date;
+            return (
+              <button
+                key={date}
+                onClick={() => setDateFilter(active ? 'all' : date)}
+                style={{
+                  padding: '2px 7px',
+                  borderRadius: '5px',
+                  border: `1px solid ${active ? colors.blue + '60' : colors.border}`,
+                  fontSize: '10px',
+                  fontFamily: fonts.mono,
+                  cursor: 'pointer',
+                  background: active ? colors.blueBg : 'transparent',
+                  color: active ? colors.blueLight : colors.fgDim,
+                  transition: transitions.fast,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {labels[date]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Task list header */}
       <div style={{ padding: '2px 12px 6px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
         <span style={{ fontSize: '10px', color: '#52525b', fontFamily: '"JetBrains Mono", monospace', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-          {filtered.length} of {tasks.length} task{tasks.length !== 1 ? 's' : ''}
+          {sorted.length} of {tasks.length} task{tasks.length !== 1 ? 's' : ''}
         </span>
         {!dbReady && (
           <span style={{ fontSize: '9px', color: '#3b82f6', fontFamily: '"JetBrains Mono", monospace' }}>loading…</span>
         )}
+        <button
+          onClick={() => setSortOrder(sortOrder === 'newest' ? 'oldest' : 'newest')}
+          title={`Sort: ${sortOrder === 'newest' ? 'newest first' : 'oldest first'}`}
+          style={{
+            marginLeft: 'auto',
+            background: 'none',
+            border: 'none',
+            color: '#52525b',
+            fontSize: '10px',
+            cursor: 'pointer',
+            fontFamily: '"JetBrains Mono", monospace',
+            padding: 0,
+            display: 'flex',
+            alignItems: 'center',
+            transition: transitions.fast,
+          }}
+        >
+          {sortOrder === 'newest' ? '↓' : '↑'}
+        </button>
         {hasActiveFilter && (
           <button
             onClick={clearFilters}
             style={{
-              marginLeft: 'auto',
               background: 'none',
               border: 'none',
               color: '#52525b',
@@ -301,17 +371,25 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
 
       {/* Task list */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 16px' }}>
-        {filtered.length === 0 ? (
+        {sorted.length === 0 ? (
           <div style={{ padding: '20px 8px', textAlign: 'center', color: '#52525b', fontSize: '12px' }}>
             {tasks.length === 0 ? 'No tasks yet — submit your first request' : 'No tasks match filters'}
           </div>
         ) : (
-          filtered.map(task => {
+          sorted.map(task => {
             const isSelected = selectedTaskId === task.id;
             return (
-              <button
+              <div
                 key={task.id}
                 onClick={() => onSelectTask(task.id)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectTask(task.id);
+                  }
+                }}
                 style={{
                   width: '100%',
                   display: 'block',
@@ -327,14 +405,14 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
                 }}
                 onMouseEnter={e => {
                   if (!isSelected) {
-                    (e.currentTarget as HTMLButtonElement).style.background = '#13131a';
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = '#1c1c22';
+                    (e.currentTarget as HTMLDivElement).style.background = '#13131a';
+                    (e.currentTarget as HTMLDivElement).style.borderColor = '#1c1c22';
                   }
                 }}
                 onMouseLeave={e => {
                   if (!isSelected) {
-                    (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
-                    (e.currentTarget as HTMLButtonElement).style.borderColor = 'transparent';
+                    (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                    (e.currentTarget as HTMLDivElement).style.borderColor = 'transparent';
                   }
                 }}
               >
@@ -398,7 +476,7 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
                     </button>
                   )}
                 </div>
-              </button>
+              </div>
             );
           })
         )}

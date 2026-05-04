@@ -1,6 +1,11 @@
 node_modules/
 dist/
+release/
 /data/
 .DS_Store
 *.local
 .env
+.env.local
+*.db
+*.db-shm
+*.db-wal

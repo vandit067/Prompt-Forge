@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw, Copy, FileJson, Code, User, Target, AlertCircle, CheckCircle } from 'lucide-react';
+import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw, Copy, FileJson, Code, User, Target, AlertCircle, CheckCircle, Lightbulb, X } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
+import { analyzePrompt } from '../lib/promptOptimizer';
 import type { Task, OutputTab, ProjectMode, ScannedContext, ActiveBackend } from '../types';
+import type { Suggestion, OptimizationResult } from '../lib/promptOptimizer';
 
 /* ─── Prompt Rendering ─── */
 interface PromptSection {
@@ -84,6 +86,159 @@ function parsePromptSections(content: string): PromptSection[] {
   }
 
   return sections.filter(s => s.content.trim() !== '');
+}
+
+function OptimizationPanel({ result, onClose }: { result: OptimizationResult; onClose: () => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid #1c1c22' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#d4d4d8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Lightbulb size={14} style={{ color: '#f59e0b' }} />
+            Optimization Suggestions
+          </h3>
+          <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#6b7280' }}>{result.summary}</p>
+        </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: '#6b7280',
+            padding: '4px',
+            display: 'flex',
+            alignItems: 'center',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#d4d4d8')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#6b7280')}
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      {/* Improvement Score */}
+      <div style={{ padding: '12px', background: '#0f0f12', borderRadius: '6px', border: '1px solid #1c1c22' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600, color: '#d4d4d8' }}>Improvement Potential</span>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#f59e0b' }}>{result.improvementScore}%</span>
+        </div>
+        <div style={{ width: '100%', height: '6px', background: '#0a0a0d', borderRadius: '3px', overflow: 'hidden' }}>
+          <div
+            style={{
+              width: `${result.improvementScore}%`,
+              height: '100%',
+              background: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
+              transition: 'width 0.3s ease',
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Suggestions List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {result.suggestions.length === 0 ? (
+          <div style={{ padding: '16px', background: '#0f2f0a', border: '1px solid #14532d', borderRadius: '6px', textAlign: 'center' }}>
+            <p style={{ margin: 0, fontSize: '12px', color: '#86efac' }}>
+              ✨ This prompt is well-structured!
+            </p>
+          </div>
+        ) : (
+          result.suggestions.map(suggestion => (
+            <div
+              key={suggestion.id}
+              style={{
+                padding: '12px',
+                background: '#0f0f12',
+                border: `1px solid ${
+                  suggestion.severity === 'high'
+                    ? '#5f1d1d'
+                    : suggestion.severity === 'medium'
+                      ? '#5f3e0a'
+                      : '#1c3c1a'
+                }`,
+                borderRadius: '6px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '24px',
+                    height: '24px',
+                    borderRadius: '4px',
+                    background:
+                      suggestion.severity === 'high'
+                        ? '#5f1d1d'
+                        : suggestion.severity === 'medium'
+                          ? '#5f3e0a'
+                          : '#1c3c1a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color:
+                        suggestion.severity === 'high'
+                          ? '#ef4444'
+                          : suggestion.severity === 'medium'
+                            ? '#f59e0b'
+                            : '#22c55e',
+                    }}
+                  >
+                    {suggestion.severity === 'high' ? '!' : suggestion.severity === 'medium' ? '−' : '•'}
+                  </span>
+                </span>
+                <div style={{ flex: 1 }}>
+                  <h4 style={{ margin: 0, fontSize: '12px', fontWeight: 600, color: '#d4d4d8' }}>
+                    {suggestion.title}
+                  </h4>
+                  <p style={{ margin: '4px 0 0', fontSize: '11px', color: '#6b7280' }}>
+                    {suggestion.description}
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ background: '#0a0a0d', borderRadius: '4px', padding: '10px', marginBottom: '8px' }}>
+                <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: 600, color: '#8b5cf6', textTransform: 'uppercase' }}>
+                  Recommendation
+                </p>
+                <p style={{ margin: 0, fontSize: '11px', color: '#d4d4d8', fontFamily: fonts.mono }}>
+                  {suggestion.recommendation}
+                </p>
+              </div>
+
+              {suggestion.example && (
+                <div style={{ background: '#0a0a0d', borderRadius: '4px', padding: '10px' }}>
+                  <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: 600, color: '#10b981', textTransform: 'uppercase' }}>
+                    Example
+                  </p>
+                  <pre
+                    style={{
+                      margin: 0,
+                      fontSize: '10px',
+                      color: '#6b7280',
+                      fontFamily: fonts.mono,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                    }}
+                  >
+                    {suggestion.example}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
 }
 
 function PromptViewer({ content }: { content: string }) {
@@ -589,12 +744,52 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <QualityBadge score={score} />
+                    <button
+                      onClick={() => {
+                        if (optimizingPromptId === prompt.id) {
+                          setOptimizingPromptId(null);
+                        } else {
+                          const result = analyzePrompt(prompt.content);
+                          setOptimizationResults(prev => ({ ...prev, [prompt.id]: result }));
+                          setOptimizingPromptId(prompt.id);
+                        }
+                      }}
+                      style={{
+                        padding: '6px 10px',
+                        background: optimizingPromptId === prompt.id ? '#8b5cf6' : '#1c1c22',
+                        border: `1px solid ${optimizingPromptId === prompt.id ? '#8b5cf6' : '#2d2d3d'}`,
+                        borderRadius: '4px',
+                        color: '#d4d4d8',
+                        fontSize: '11px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onMouseEnter={e => {
+                        if (optimizingPromptId !== prompt.id) {
+                          (e.currentTarget as HTMLButtonElement).style.background = '#2d2d3d';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLButtonElement).style.background = optimizingPromptId === prompt.id ? '#8b5cf6' : '#1c1c22';
+                      }}
+                      title="Analyze and optimize this prompt"
+                    >
+                      <Lightbulb size={12} />
+                      Optimize
+                    </button>
                     <CopyButton text={prompt.content} />
                   </div>
                 </div>
                 {/* Prompt body */}
                 <div style={{ padding: '16px', background: '#0a0a0d' }}>
-                  <PromptViewer content={prompt.content} />
+                  {optimizingPromptId === prompt.id && optimizationResults[prompt.id] ? (
+                    <OptimizationPanel result={optimizationResults[prompt.id]} onClose={() => setOptimizingPromptId(null)} />
+                  ) : (
+                    <PromptViewer content={prompt.content} />
+                  )}
                 </div>
               </div>
               );
@@ -1993,6 +2188,8 @@ export function CommandCenter({
   const [savedDraft, setSavedDraft] = useState<string | null>(() =>
     localStorage.getItem('prompt-forge-draft')
   );
+  const [optimizingPromptId, setOptimizingPromptId] = useState<string | null>(null);
+  const [optimizationResults, setOptimizationResults] = useState<Record<string, OptimizationResult>>({});
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea

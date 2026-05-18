@@ -1,9 +1,154 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw, Copy, FileJson, Code } from 'lucide-react';
+import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw, Copy, FileJson, Code, User, Target, AlertCircle, CheckCircle } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import type { Task, OutputTab, ProjectMode, ScannedContext, ActiveBackend } from '../types';
+
+/* ─── Prompt Rendering ─── */
+interface PromptSection {
+  type: 'role' | 'context' | 'goal' | 'divider' | 'section' | 'text';
+  title?: string;
+  content: string;
+  color?: string;
+  icon?: React.ReactNode;
+}
+
+function parsePromptSections(content: string): PromptSection[] {
+  const sections: PromptSection[] = [];
+  const lines = content.split('\n');
+  let currentSection = '';
+  let currentContent: string[] = [];
+
+  const getSectionColor = (type: string) => {
+    const map: Record<string, string> = {
+      'Role': '#8b5cf6',
+      'Context': '#3b82f6',
+      'Goal': '#10b981',
+      'Steps': '#f59e0b',
+      'Key Constraints': '#ef4444',
+      'Expected Output': '#06b6d4',
+      'Verification': '#22c55e',
+    };
+    return map[type] || '#6b7280';
+  };
+
+  const getSectionIcon = (type: string) => {
+    const iconMap: Record<string, React.ReactNode> = {
+      'Role': <User size={14} />,
+      'Goal': <Target size={14} />,
+      'Key Constraints': <AlertCircle size={14} />,
+      'Verification': <CheckCircle size={14} />,
+    };
+    return iconMap[type] || null;
+  };
+
+  for (const line of lines) {
+    if (line === '---') {
+      if (currentContent.length > 0) {
+        sections.push({
+          type: 'section',
+          title: currentSection,
+          content: currentContent.join('\n').trim(),
+          color: getSectionColor(currentSection),
+          icon: getSectionIcon(currentSection),
+        });
+        currentContent = [];
+      }
+      sections.push({ type: 'divider', content: '' });
+    } else if (line.match(/^(Role|Context|Goal|Steps|Key Constraints|Expected Output|Verification):/)) {
+      if (currentContent.length > 0) {
+        sections.push({
+          type: 'section',
+          title: currentSection,
+          content: currentContent.join('\n').trim(),
+          color: getSectionColor(currentSection),
+          icon: getSectionIcon(currentSection),
+        });
+      }
+      currentSection = line.replace(':', '').trim();
+      currentContent = [];
+    } else {
+      currentContent.push(line);
+    }
+  }
+
+  if (currentContent.length > 0) {
+    sections.push({
+      type: 'section',
+      title: currentSection,
+      content: currentContent.join('\n').trim(),
+      color: getSectionColor(currentSection),
+      icon: getSectionIcon(currentSection),
+    });
+  }
+
+  return sections.filter(s => s.content.trim() !== '');
+}
+
+function PromptViewer({ content }: { content: string }) {
+  const sections = parsePromptSections(content);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {sections.map((section, idx) => {
+        if (section.type === 'divider') {
+          return (
+            <div
+              key={`divider-${idx}`}
+              style={{
+                height: '1px',
+                background: 'linear-gradient(90deg, transparent, #1c1c22 50%, transparent)',
+                margin: '8px 0',
+              }}
+            />
+          );
+        }
+
+        return (
+          <div key={`section-${idx}`}>
+            {section.title && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                <span style={{ color: section.color }}>
+                  {section.icon}
+                </span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    color: section.color,
+                    fontFamily: '"JetBrains Mono", monospace',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  {section.title}
+                </span>
+              </div>
+            )}
+            <pre
+              style={{
+                margin: 0,
+                padding: '10px 12px',
+                background: '#0f0f12',
+                border: `1px solid ${section.color}22`,
+                borderRadius: '4px',
+                fontFamily: '"JetBrains Mono", monospace',
+                fontSize: '12px',
+                lineHeight: '1.5',
+                color: '#d4d4d8',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {section.content}
+            </pre>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /* ─── File Utilities ─── */
 function getFileTypeIcon(filename: string) {
@@ -448,21 +593,9 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
                   </div>
                 </div>
                 {/* Prompt body */}
-                <pre
-                  style={{
-                    margin: 0,
-                    padding: '14px',
-                    fontFamily: '"JetBrains Mono", monospace',
-                    fontSize: '12px',
-                    lineHeight: '1.7',
-                    color: '#d4d4d8',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    overflowX: 'auto',
-                  }}
-                >
-                  {prompt.content}
-                </pre>
+                <div style={{ padding: '16px', background: '#0a0a0d' }}>
+                  <PromptViewer content={prompt.content} />
+                </div>
               </div>
               );
             })}

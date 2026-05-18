@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Terminal, Download, Upload, RotateCcw, CheckCircle2, Plus, X } from 'lucide-react';
+import { Terminal, Download, Upload, RotateCcw, CheckCircle2, Plus, X, Key, Eye, EyeOff } from 'lucide-react';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import { api } from '../lib/api';
 import type { Task } from '../types';
@@ -166,6 +166,10 @@ export function Settings({ tasks, onImport, onResetPatterns, userRules, onRulesC
   const [loading, setLoading] = useState(true);
   const [newRule, setNewRule] = useState('');
   const ruleInputRef = useRef<HTMLInputElement>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [backend, setBackend] = useState<'anthropic' | 'ollama' | 'script'>('anthropic');
 
   useEffect(() => {
     api.getSettings()
@@ -247,6 +251,24 @@ export function Settings({ tasks, onImport, onResetPatterns, userRules, onRulesC
     }
   }
 
+  function handleSaveApiKey() {
+    if (apiKeyInput.trim()) {
+      setApiKey(apiKeyInput);
+      setApiKeyInput('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  }
+
+  function handleClearApiKey() {
+    setApiKey('');
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  const hasApiKey = !!apiKey;
+  const maskedKey = hasApiKey ? `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}` : 'Not set';
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       {/* Header */}
@@ -319,6 +341,144 @@ export function Settings({ tasks, onImport, onResetPatterns, userRules, onRulesC
           </div>
           <FieldRow label="Default Project Path">
             <SettingsInput value={defaultPath} onChange={setDefaultPath} placeholder="~/projects" />
+          </FieldRow>
+        </SectionCard>
+
+        {/* API Configuration */}
+        <SectionCard title="API & Backend" subtitle="Configure Claude API access for live prompt testing.">
+          <FieldRow label="Anthropic API Key">
+            {hasApiKey ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                <div
+                  style={{
+                    flex: 1,
+                    padding: '7px 10px',
+                    background: '#18181b',
+                    border: '1px solid #1c1c22',
+                    borderRadius: '7px',
+                    fontFamily: fonts.mono,
+                    fontSize: '12px',
+                    color: '#6b7280',
+                  }}
+                >
+                  {showApiKey ? apiKey : maskedKey}
+                </div>
+                <button
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  style={{
+                    padding: '7px 10px',
+                    background: '#18181b',
+                    border: '1px solid #1c1c22',
+                    borderRadius: '7px',
+                    color: '#71717a',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.color = '#d4d4d8')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#71717a')}
+                >
+                  {showApiKey ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+                <button
+                  onClick={handleClearApiKey}
+                  style={{
+                    padding: '7px 10px',
+                    background: '#200d0d',
+                    border: '1px solid #5f1d1d',
+                    borderRadius: '7px',
+                    color: '#ef4444',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontFamily: fonts.sans,
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#3f1d1d';
+                    (e.currentTarget as HTMLButtonElement).style.color = '#fca5a5';
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#200d0d';
+                    (e.currentTarget as HTMLButtonElement).style.color = '#ef4444';
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: '8px', flex: 1 }}>
+                <input
+                  type="password"
+                  placeholder="sk-ant-..."
+                  value={apiKeyInput}
+                  onChange={e => setApiKeyInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveApiKey(); }}
+                  style={{
+                    flex: 1,
+                    background: '#18181b',
+                    border: '1px solid #1c1c22',
+                    borderRadius: '7px',
+                    padding: '7px 10px',
+                    color: '#fafafa',
+                    fontSize: '12px',
+                    fontFamily: fonts.mono,
+                  }}
+                  onFocus={e => (e.target.style.borderColor = '#3b82f6')}
+                  onBlur={e => (e.target.style.borderColor = '#1c1c22')}
+                />
+                <button
+                  onClick={handleSaveApiKey}
+                  disabled={!apiKeyInput.trim()}
+                  style={{
+                    padding: '7px 14px',
+                    borderRadius: '7px',
+                    border: '1px solid #1c1c22',
+                    background: apiKeyInput.trim() ? '#18181b' : '#0f0f12',
+                    color: apiKeyInput.trim() ? '#a1a1aa' : '#3c3c48',
+                    fontSize: '12px',
+                    cursor: apiKeyInput.trim() ? 'pointer' : 'not-allowed',
+                    fontFamily: fonts.sans,
+                    transition: 'all 0.12s',
+                    fontWeight: 600,
+                  }}
+                  onMouseEnter={e => {
+                    if (apiKeyInput.trim()) {
+                      (e.currentTarget as HTMLButtonElement).style.background = '#2d2d3d';
+                      (e.currentTarget as HTMLButtonElement).style.color = '#d4d4d8';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = apiKeyInput.trim() ? '#18181b' : '#0f0f12';
+                    (e.currentTarget as HTMLButtonElement).style.color = apiKeyInput.trim() ? '#a1a1aa' : '#3c3c48';
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            )}
+          </FieldRow>
+          <p style={{ fontSize: '11px', color: '#52525b', marginTop: '8px', marginBottom: 0 }}>
+            🔒 API key is stored locally and only used for live testing
+          </p>
+          <FieldRow label="Backend">
+            <select
+              value={backend}
+              onChange={e => setBackend(e.target.value as any)}
+              style={{
+                flex: 1,
+                padding: '7px 10px',
+                background: '#18181b',
+                border: '1px solid #1c1c22',
+                borderRadius: '7px',
+                color: '#d4d4d8',
+                fontSize: '12px',
+                fontFamily: fonts.mono,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="anthropic">Anthropic (Claude)</option>
+              <option value="ollama">Ollama (Local)</option>
+              <option value="script">Script/CLI</option>
+            </select>
           </FieldRow>
         </SectionCard>
 

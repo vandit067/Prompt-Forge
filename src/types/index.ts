@@ -19,6 +19,26 @@ export type TaskStatus = 'pending' | 'success' | 'error';
 
 export type Screen = 'command-center' | 'analytics' | 'settings' | 'task-detail';
 
+export type Backend = 'anthropic' | 'ollama' | 'script';
+
+export type Model = 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+
+export interface AppSettings {
+  // API Configuration
+  apiKey?: string;
+  backend: Backend;
+  model: Model;
+
+  // Application Preferences
+  defaultTaskType: TaskType;
+  autoSaveInterval: number; // milliseconds, 0 = disabled
+  theme: 'light' | 'dark' | 'system';
+  promptStyle: 'verbose' | 'concise';
+
+  // Feature Flags
+  enableLivePreview: boolean;
+}
+
 export type ProjectMode = 'new' | 'existing';
 
 export interface ScannedFile {

@@ -538,10 +538,321 @@ Verification Checklist:
   }
 }
 
+function buildClaudeFile(input: string, type: TaskType): GeneratedFile {
+  return {
+    id: uid(),
+    filename: 'CLAUDE.md',
+    content: `# CLAUDE.md — Workspace Rules
+
+## Task
+${input}
+
+## Git Identity
+- Author name: [Your Name]
+- Author email: [your.email@example.com]
+- Always use this identity for all commits
+
+## Branch Naming
+- Conventional prefixes: feature/, fix/, docs/, refactor/, chore/
+- Never use "claude", "Claude", or "anthropic" in branch names
+- Example: feature/orchestrator-dashboard-prototype
+
+## Commit Messages
+- Follow conventional commits format: \`type: short description\`
+- Types: feat, fix, docs, refactor, chore, test, style
+- Never mention "Claude" or "Anthropic" in messages
+- Do NOT include session URLs in commit messages
+
+## Development Rules
+- TypeScript strict mode — no \`any\`
+- Diagnose before mutate — read code before changing
+- Small atomic commits — one change per commit
+- Tests before refactoring — characterize behavior first
+- No paid APIs — all processing is local
+- Reuse existing utilities — don't reinvent
+
+## Code Quality
+- Function length < 50 lines
+- One responsibility per function/component
+- Clear naming over comments
+- No half-finished implementations`,
+  };
+}
+
+function buildGuardrailsFile(input: string, type: TaskType): GeneratedFile {
+  let constraints = '';
+
+  switch (type) {
+    case 'NEW_TOOL':
+      constraints = `## Constraints for Building New Tools
+
+### [CRITICAL]
+- TypeScript strict mode, no \`any\`
+- Small commits per step — atomic changes only
+- No paid APIs — all processing is local
+
+### [HIGH]
+- Diagnose before mutate
+- Reuse existing utilities — don't reinvent
+- Tests exist before feature completion
+
+### [MEDIUM]
+- One feature per commit
+- Error handling for all edge cases
+- Documentation updated alongside code`;
+      break;
+
+    case 'BUG_FIX':
+      constraints = `## Constraints for Bug Fixes
+
+### [CRITICAL]
+- Diagnose before mutate — no code changes in first 2 steps
+- Fix only the broken path — no cleanup or refactoring
+- Regression test: must fail before fix, pass after
+- No existing tests should break
+
+### [HIGH]
+- Root cause must be documented with evidence
+- Minimal fix — usually ≤ 5 lines changed
+- Commit message explains the root cause
+
+### [MEDIUM]
+- No speculative fixes
+- Test the exact reproduction scenario
+- Verify no side effects in related code`;
+      break;
+
+    case 'NEW_FEATURE':
+      constraints = `## Constraints for New Features
+
+### [CRITICAL]
+- Reuse existing utilities — don't reinvent
+- TypeScript strict, Zod at all data boundaries
+- All states handled: happy path, loading, error, empty
+- Existing tests must still pass
+
+### [HIGH]
+- Follow existing patterns and conventions
+- Design interface/types before implementation
+- Manual testing of full flow required
+
+### [MEDIUM]
+- Update SPEC.md if system shape changes
+- Document new APIs with JSDoc
+- New user-facing features need tests`;
+      break;
+
+    case 'BUG_FIX':
+      constraints = `## Constraints for Bug Fixes
+
+### [CRITICAL]
+- Diagnose before mutate — no code changes in steps 1-2
+- Fix only the broken path — no cleanup in same commit
+- Regression test: must fail before fix, pass after
+
+### [HIGH]
+- Root cause must be identified with evidence
+- Minimal fix — usually ≤ 5 lines changed
+- No side effects in unrelated code
+
+### [MEDIUM]
+- Document the root cause in commit message
+- Test exact reproduction scenario
+- Verify existing tests still pass`;
+      break;
+
+    case 'CODE_REVIEW':
+      constraints = `## Constraints for Code Reviews
+
+### [CRITICAL]
+- Flag hardcoded secrets immediately as BLOCKER
+- Blockers must include specific suggested fix
+- Focus on production issues, not style
+
+### [HIGH]
+- Read all relevant files before commenting
+- Check: correctness, security, performance, maintainability
+- One finding per entry with clear severity
+
+### [MEDIUM]
+- Security: input validation, injection, auth
+- Performance: N+1 queries, re-renders, indexes
+- No BLOCKERS = approved for merge`;
+      break;
+
+    case 'REFACTOR':
+      constraints = `## Constraints for Refactoring
+
+### [CRITICAL]
+- Tests must exist BEFORE refactoring starts
+- No behavior changes — structure only
+- One change type per commit: rename, extract, or move
+
+### [HIGH]
+- Characterization tests written first
+- All existing tests must pass
+- No observable behavior change
+
+### [MEDIUM]
+- Simplify one thing at a time
+- Document complex logic before refactoring
+- Measure complexity reduction`;
+      break;
+
+    case 'DEBUG_INVESTIGATION':
+      constraints = `## Constraints for Debug Investigation
+
+### [CRITICAL]
+- Don't implement a fix — investigate only
+- Each hypothesis must be testable
+- Report format: Hypothesis → Test → Result
+
+### [HIGH]
+- Form 2-3 hypotheses ranked by likelihood
+- Execute discriminating tests for each
+- Confirmed root cause with supporting evidence
+
+### [MEDIUM]
+- Collect observable data first
+- Don't make speculative fixes
+- Document reproduction steps`;
+      break;
+
+    case 'DESIGN_DECISION':
+      constraints = `## Constraints for Design Decisions
+
+### [CRITICAL]
+- Recommendation must be concrete — no "it depends"
+- All options must have concrete trade-offs
+- Consider: team familiarity, maturity, bundle size
+
+### [HIGH]
+- Identify 2-3 concrete options
+- List pros, cons, failure modes, migration cost
+- Generate implementation prompt for chosen option
+
+### [MEDIUM]
+- Decision framework for future choices
+- Known failure modes documented
+- Migration path clear`;
+      break;
+
+    case 'PERF_OPTIMIZATION':
+      constraints = `## Constraints for Performance Optimization
+
+### [CRITICAL]
+- Only address measured bottlenecks — no speculation
+- Capture before-state screenshots
+- One fix per commit with measurements
+
+### [HIGH]
+- Diagnose first session — no code changes
+- Quantify all measurements
+- Verify no regressions after optimization
+
+### [MEDIUM]
+- Test full user flow after changes
+- Document before/after metrics
+- Target: first load ≤ 1.5s on throttled 4G`;
+      break;
+
+    case 'DATA_INTEGRATION':
+      constraints = `## Constraints for Data Integration
+
+### [CRITICAL]
+- Never commit API keys or credentials
+- MOCK_MODE=true by default
+- Use env vars only for secrets
+
+### [HIGH]
+- Define data shape as types first
+- Build UI against mock data first
+- Real API wiring in separate session
+
+### [MEDIUM]
+- [MOCK] badge visible when mocking
+- All edge cases handled
+- Error messages meaningful`;
+      break;
+
+    case 'DOC_OR_SPEC':
+      constraints = `## Constraints for Documentation
+
+### [CRITICAL]
+- Every code example must compile and run
+- Audience: engineers new to the project
+- Keep overview ≤ 200 words
+
+### [HIGH]
+- Structure: Overview, Quickstart, Configuration, Troubleshooting
+- All config options with descriptions
+- Top 3 failure modes with fixes
+
+### [MEDIUM]
+- JSDoc on public functions
+- Links to related docs
+- Screenshots for visual topics`;
+      break;
+
+    default:
+      constraints = `## General Development Constraints
+
+### [CRITICAL]
+- TypeScript strict mode
+- Tests pass before merging
+- No breaking changes without discussion
+
+### [HIGH]
+- Code follows project conventions
+- Meaningful commit messages
+- Documentation updated
+
+### [MEDIUM]
+- Performance impact assessed
+- Edge cases considered
+- Existing functionality preserved`;
+  }
+
+  return {
+    id: uid(),
+    filename: 'GUARDRAILS.md',
+    content: `# GUARDRAILS.md — Do's and Don'ts
+
+## Task
+${input}
+
+## Type: ${type}
+
+${constraints}
+
+## Universal Rules (all tasks)
+- ✅ DO: Read existing code before making changes
+- ✅ DO: Commit after each logical change
+- ✅ DO: Test before considering work done
+- ✅ DO: Ask questions if unclear
+- ❌ DON'T: Refactor while fixing bugs
+- ❌ DON'T: Add features while fixing bugs
+- ❌ DON'T: Skip tests
+- ❌ DON'T: Commit sensitive data
+
+## Decision Framework
+When uncertain about the right approach:
+1. Does it match existing patterns in the codebase?
+2. Is it the simplest solution that works?
+3. Will it be maintainable 6 months from now?
+4. Does it add unnecessary complexity?`,
+  };
+}
+
 function buildFiles(input: string, type: TaskType): GeneratedFile[] {
-  if (type !== 'NEW_TOOL') return [];
-  return [
-    {
+  const files: GeneratedFile[] = [
+    buildClaudeFile(input, type),
+    buildGuardrailsFile(input, type),
+  ];
+
+  // Add SPEC.md only for NEW_TOOL
+  if (type === 'NEW_TOOL') {
+    files.push({
       id: uid(),
       filename: 'SPEC.md',
       content: `# ${input.slice(0, 55)}${input.length > 55 ? '…' : ''} — SPEC
@@ -557,21 +868,10 @@ ${input}
 2. Feature completion
 3. Error handling + edge cases
 4. Tests + distribution`,
-    },
-    {
-      id: uid(),
-      filename: 'CLAUDE.md',
-      content: `# CLAUDE.md
+    });
+  }
 
-Read SPEC.md before any task.
-
-## Rules
-- TypeScript strict — no \`any\`
-- Diagnose before mutate
-- One feature per session
-- No paid APIs`,
-    },
-  ];
+  return files;
 }
 
 function buildPlan(type: TaskType): PlanStep[] {

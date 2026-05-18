@@ -9,16 +9,21 @@ export function classifyTask(input: string): TaskType {
   ) return 'BUG_FIX';
 
   const lower = input.toLowerCase();
+  if (/\b(security audit|security review|vulnerability|threat model|penetration|secure|authentication|authorization|encryption|xss|sql injection|csrf)\b/.test(lower)) return 'SECURITY_AUDIT';
+  if (/\b(api design|api endpoint|rest api|graphql|schema|request|response format|api contract)\b/.test(lower)) return 'API_DESIGN';
+  if (/\b(test strategy|testing approach|test plan|unit test|integration test|e2e test|coverage|test cases)\b/.test(lower)) return 'TEST_STRATEGY';
+  if (/\b(architecture|system design|microservice|monolith|deployment|infrastructure|scalability|distributed)\b/.test(lower)) return 'ARCH_DECISION';
+  if (/\b(monitoring|logging|metrics|alerting|observability|dashboard|tracing|apm)\b/.test(lower)) return 'MONITORING_SETUP';
   if (/\b(build|create|scaffold|make a tool|new app|new dashboard|new system|write a tool|build me)\b/.test(lower)) return 'NEW_TOOL';
   if (/\b(not working|broken|error|crash|bug|fix|fails|doesn'?t work|won'?t work|issue with|breaking)\b/.test(lower)) return 'BUG_FIX';
-  if (/\b(review|is this good|check this|security audit|look at this code)\b/.test(lower)) return 'CODE_REVIEW';
+  if (/\b(review|is this good|check this|look at this code|code review)\b/.test(lower)) return 'CODE_REVIEW';
   if (/\b(refactor|clean up|simplify|split|reorganize|restructure|improve the code)\b/.test(lower)) return 'REFACTOR';
   if (/\b(why does|how does|i don'?t understand|investigate|trace|what is causing)\b/.test(lower)) return 'DEBUG_INVESTIGATION';
   if (/\b(should i|best approach|which is better|versus|\bvs\b|options for|recommend a)\b/.test(lower)) return 'DESIGN_DECISION';
   if (/\b(slow|fast|performance|optimize|speed up|memory|throughput|latency|loading time)\b/.test(lower)) return 'PERF_OPTIMIZATION';
-  if (/\b(connect to|pull data|fetch from|integrate with|api endpoint|database)\b/.test(lower)) return 'DATA_INTEGRATION';
+  if (/\b(connect to|pull data|fetch from|integrate with|database|api)\b/.test(lower)) return 'DATA_INTEGRATION';
   if (/\b(docs|documentation|readme|spec out|write a spec|document the|technical spec)\b/.test(lower)) return 'DOC_OR_SPEC';
-  if (/\b(add|extend|integrate|implement|include|support for)\b/.test(lower)) return 'NEW_FEATURE';
+  if (/\b(add|extend|implement|include|support for|feature)\b/.test(lower)) return 'NEW_FEATURE';
   return 'NEW_FEATURE';
 }
 
@@ -535,6 +540,251 @@ Verification Checklist:
 □ Top 3 failure modes documented with fixes`,
         },
       ];
+
+    case 'API_DESIGN':
+      return [
+        {
+          id: uid(),
+          sessionLabel: 'Session 1 — API Design & Specification',
+          content: `Role: API architect designing for clarity and scalability
+
+Context: ${goal}.
+
+Goal: Design complete API specification with endpoints, schemas, and error handling
+
+---
+
+Steps (in order):
+1. Identify all resources and operations needed
+2. Define endpoints with HTTP methods and paths
+3. Define request/response schemas (with examples)
+4. Design error responses (400, 401, 403, 404, 500, etc.)
+5. Document rate limiting, pagination, authentication approach
+
+Key Constraints (ordered by importance):
+- [CRITICAL] RESTful principles or clear GraphQL structure
+- [CRITICAL] All endpoints have clear request/response examples
+- Version the API (v1, v2) from the start
+- Document error codes with solutions
+
+Expected Output:
+- OpenAPI/Swagger spec (or detailed endpoint list)
+- Request/response schema examples
+- Error handling strategy
+- Rate limiting & pagination policy
+
+---
+
+Verification Checklist:
+□ All endpoints documented with methods, paths, schemas
+□ Example requests and responses for each endpoint
+□ Error handling for all failure cases
+□ Authentication/authorization approach clear`,
+        },
+      ];
+
+    case 'SECURITY_AUDIT':
+      return [
+        {
+          id: uid(),
+          sessionLabel: 'Session 1 — Security Review',
+          content: `Role: Security specialist performing threat assessment
+
+Context: ${goal}.
+
+Goal: Complete security audit identifying risks and remediation steps
+
+---
+
+Steps (in order):
+1. Identify assets and data sensitivity levels
+2. List potential attack vectors (input validation, auth, injection, etc.)
+3. Review code for OWASP Top 10 issues
+4. Assess infrastructure/deployment security
+5. Prioritize findings by severity and likelihood
+
+Key Constraints (ordered by importance):
+- [CRITICAL] Flag any secrets, API keys, or hardcoded credentials
+- [CRITICAL] Rate findings by: Critical, High, Medium, Low
+- Document proof-of-concept or reproduction for each finding
+- Prioritize human factors (credentials in code > infrastructure)
+
+Expected Output:
+- List of findings with severity, description, and fix
+- Risk prioritization matrix
+- Immediate action items (fix now)
+- Longer-term improvements
+- Security testing recommendations
+
+---
+
+Verification Checklist:
+□ No exposed secrets in analysis
+□ All findings have clear remediation steps
+□ Findings are reproducible
+□ Risk prioritization is clear`,
+        },
+      ];
+
+    case 'TEST_STRATEGY':
+      return [
+        {
+          id: uid(),
+          sessionLabel: 'Session 1 — Define Test Strategy',
+          content: `Role: QA architect designing test coverage and approach
+
+Context: ${goal}.
+
+Goal: Define complete testing strategy with coverage targets and test plan
+
+---
+
+Steps (in order):
+1. Identify critical paths (happy path, error cases, edge cases)
+2. Define test pyramid: unit / integration / e2e ratio
+3. List test scenarios for each critical path
+4. Define coverage targets (aim for 70-80% coverage)
+5. Plan test automation vs manual testing
+
+Key Constraints (ordered by importance):
+- [CRITICAL] Unit tests for business logic (>80% coverage)
+- [CRITICAL] Integration tests for critical flows
+- [CRITICAL] E2E tests for user workflows
+- Manual testing for UX and edge cases
+
+Expected Output:
+- Test pyramid breakdown (unit: integration: e2e ratio)
+- List of critical test scenarios
+- Coverage targets by module
+- Testing timeline and effort estimate
+- Test automation roadmap
+
+---
+
+Verification Checklist:
+□ All critical paths have test scenarios
+□ Coverage targets are realistic
+□ Test types (unit/integration/e2e) are balanced
+□ Automation strategy is clear`,
+        },
+      ];
+
+    case 'ARCH_DECISION':
+      return [
+        {
+          id: uid(),
+          sessionLabel: 'Session 1 — Architecture Design',
+          content: `Role: Architect designing system structure and technology choices
+
+Context: ${goal}.
+
+Goal: Design system architecture with trade-off analysis and implementation roadmap
+
+---
+
+Steps (in order):
+1. Identify system requirements (scalability, reliability, latency, cost)
+2. Sketch 2-3 architectural options (monolith vs microservices, etc.)
+3. For each option: pros, cons, failure modes, scaling limits
+4. Technology choices: languages, databases, frameworks, infrastructure
+5. Deployment strategy and operational requirements
+
+Key Constraints (ordered by importance):
+- [CRITICAL] Recommendation must fit team's expertise
+- [CRITICAL] Document trade-offs clearly (no "it's better" without reasoning)
+- Plan for failure modes: network partitions, cascading failures, data loss
+- Cost analysis: infrastructure, operational overhead
+
+Expected Output:
+- Architecture diagram(s)
+- Comparison of 2-3 options with trade-offs
+- Selected architecture with rationale
+- Technology stack justification
+- Deployment and operational plan
+- Scaling roadmap (how it grows)
+
+---
+
+Verification Checklist:
+□ All options have documented trade-offs
+□ Selected architecture fits requirements
+□ Team has skills for chosen tech
+□ Operational requirements are clear`,
+        },
+      ];
+
+    case 'MONITORING_SETUP':
+      return [
+        {
+          id: uid(),
+          sessionLabel: 'Session 1 — Observability Design',
+          content: `Role: DevOps/SRE engineer designing observability
+
+Context: ${goal}.
+
+Goal: Design complete monitoring, logging, and alerting strategy
+
+---
+
+Steps (in order):
+1. Define key metrics: latency, throughput, error rate, resource usage
+2. List critical alerts: when ops team should be paged
+3. Design logging strategy: what to log, where, retention
+4. Plan dashboards: for ops, for business, for developers
+5. Define incident response process (detection → alert → remediation)
+
+Key Constraints (ordered by importance):
+- [CRITICAL] Alert on business impact (not noise)
+- [CRITICAL] Metrics must be actionable (not just collection)
+- Balance visibility with cost (storage, processing)
+- Logs should answer: "what happened and why"
+
+Expected Output:
+- List of metrics to track with thresholds
+- Alert rules with severity levels and escalation
+- Logging schema and retention policy
+- Dashboard design (what metrics, for whom)
+- SLO/SLI definitions
+- Incident response playbook (who, what, when)
+
+---
+
+Verification Checklist:
+□ All critical paths have metrics
+□ Alerts are actionable (not noise)
+□ Logging captures failure scenarios
+□ Dashboards answer "is everything okay?"`,
+        },
+      ];
+
+    default:
+      return [
+        {
+          id: uid(),
+          sessionLabel: 'Execute Task',
+          content: `Role: Focused executor
+
+Context: ${goal}.
+
+Goal: Complete the task with quality and clarity
+
+---
+
+Steps:
+1. Understand requirements and constraints
+2. Plan the approach
+3. Execute the plan
+4. Verify completion
+5. Document results
+
+---
+
+Verification:
+□ Task completed as specified
+□ Quality standards met
+□ Documentation updated`,
+        },
+      ];
   }
 }
 
@@ -794,6 +1044,116 @@ function buildGuardrailsFile(input: string, type: TaskType): GeneratedFile {
 - Screenshots for visual topics`;
       break;
 
+    case 'API_DESIGN':
+      constraints = `## Constraints for API Design
+
+### [CRITICAL]
+- All endpoints documented with examples
+- Request/response schemas are clear and complete
+- Error responses documented (400, 401, 403, 404, 500, etc.)
+- Backward compatibility strategy defined
+
+### [HIGH]
+- RESTful principles (or clear GraphQL structure)
+- Version the API from the start (v1, v2)
+- Rate limiting and pagination approach defined
+- Authentication/authorization model clear
+
+### [MEDIUM]
+- Consistent naming conventions
+- Idempotency for side effects
+- Timestamp and versioning strategy
+- Documentation is OpenAPI/Swagger compatible`;
+      break;
+
+    case 'SECURITY_AUDIT':
+      constraints = `## Constraints for Security Audit
+
+### [CRITICAL]
+- Flag any exposed secrets, API keys, or credentials immediately
+- All findings include proof-of-concept or reproduction steps
+- Findings prioritized by severity: Critical > High > Medium > Low
+- Each finding includes clear remediation steps
+
+### [HIGH]
+- Review for OWASP Top 10
+- Assess authentication and authorization
+- Check for injection vulnerabilities
+- Verify data protection and encryption
+
+### [MEDIUM]
+- Document attack vectors and threats
+- Risk assessment (likelihood × impact)
+- Compliance considerations (GDPR, PCI-DSS, etc.)
+- Security testing roadmap`;
+      break;
+
+    case 'TEST_STRATEGY':
+      constraints = `## Constraints for Test Strategy
+
+### [CRITICAL]
+- Coverage targets realistic (70-80% for business logic)
+- Critical paths have test scenarios
+- Unit/integration/e2e balance defined
+- Automation strategy clear
+
+### [HIGH]
+- All error cases have tests
+- Performance tests for critical paths
+- Flaky tests identified and addressed
+- Test data and fixtures documented
+
+### [MEDIUM]
+- Testing timeline and effort estimates
+- Manual testing approach for edge cases
+- Regression test suite
+- Test maintenance and updates plan`;
+      break;
+
+    case 'ARCH_DECISION':
+      constraints = `## Constraints for Architecture Design
+
+### [CRITICAL]
+- Technology choices must fit team expertise
+- Trade-offs documented clearly (not "it's better")
+- Failure modes identified: network partitions, cascades, data loss
+- Scaling strategy from day 1
+
+### [HIGH]
+- 2-3 options with pros/cons/costs
+- Deployment and operational requirements clear
+- Cost analysis: infrastructure and operational overhead
+- Monitoring and observability built-in from start
+
+### [MEDIUM]
+- Database selection justified
+- External service dependencies documented
+- Migration path from legacy system
+- Disaster recovery and backup strategy`;
+      break;
+
+    case 'MONITORING_SETUP':
+      constraints = `## Constraints for Monitoring Setup
+
+### [CRITICAL]
+- Metrics are actionable (not just collected)
+- Alerts focus on business impact, not noise
+- Critical paths have health checks
+- Logging captures failure scenarios
+
+### [HIGH]
+- SLO/SLI definitions for services
+- Dashboard answers "is everything okay?"
+- Incident response playbook exists
+- On-call rotation and escalation clear
+
+### [MEDIUM]
+- Retention policies for logs and metrics
+- Cost management (avoid log spam)
+- Alerting thresholds tuned (not flaky)
+- Performance impact of monitoring assessed`;
+      break;
+
     default:
       constraints = `## General Development Constraints
 
@@ -902,6 +1262,31 @@ function buildPlan(type: TaskType): PlanStep[] {
         { session: 1, title: 'Mock-First UI', description: 'Define types, build against mock data', estimatedTime: '30 min' },
         { session: 2, title: 'Real Integration', description: 'Wire real API, add error handling', estimatedTime: '30 min' },
       ];
+    case 'API_DESIGN':
+      return [
+        { session: 1, title: 'Design & Spec', description: 'Define endpoints, schemas, error handling', estimatedTime: '45-60 min' },
+        { session: 2, title: 'Documentation', description: 'Write OpenAPI spec, examples, API guide', estimatedTime: '30 min' },
+      ];
+    case 'SECURITY_AUDIT':
+      return [
+        { session: 1, title: 'Security Review', description: 'Threat assessment, vulnerability identification', estimatedTime: '60-90 min' },
+        { session: 2, title: 'Remediation Plan', description: 'Prioritize findings, create fix roadmap', estimatedTime: '30 min' },
+      ];
+    case 'TEST_STRATEGY':
+      return [
+        { session: 1, title: 'Test Planning', description: 'Define coverage targets, test pyramid, scenarios', estimatedTime: '30-45 min' },
+        { session: 2, title: 'Automation Setup', description: 'Implement test infrastructure, sample tests', estimatedTime: '45 min' },
+      ];
+    case 'ARCH_DECISION':
+      return [
+        { session: 1, title: 'Architecture Design', description: 'Compare options, select approach, design system', estimatedTime: '60-90 min' },
+        { session: 2, title: 'Implementation Plan', description: 'Create phased roadmap, technology choices', estimatedTime: '30 min' },
+      ];
+    case 'MONITORING_SETUP':
+      return [
+        { session: 1, title: 'Observability Design', description: 'Define metrics, alerts, logging strategy', estimatedTime: '30-45 min' },
+        { session: 2, title: 'Infrastructure Setup', description: 'Implement dashboards, alerts, playbooks', estimatedTime: '45 min' },
+      ];
     default:
       return [{ session: 1, title: 'Execute', description: 'Complete the task', estimatedTime: '30 min' }];
   }
@@ -950,6 +1335,46 @@ function buildChecklist(type: TaskType): string[] {
         'Before screenshot: Bundle visualizer baseline',
         'After: first load ≤ 1.5s on throttled 4G',
         'LCP improved vs Lighthouse baseline',
+      ];
+    case 'API_DESIGN':
+      return [
+        'All endpoints documented with examples',
+        'Request and response schemas defined',
+        'Error handling documented (400, 401, 403, 404, 500)',
+        'OpenAPI/Swagger spec complete',
+        'Authentication and authorization approach clear',
+      ];
+    case 'SECURITY_AUDIT':
+      return [
+        'No exposed secrets or API keys',
+        'All findings documented with severity and fixes',
+        'Critical findings have immediate remediation',
+        'OWASP Top 10 reviewed',
+        'Security testing roadmap defined',
+      ];
+    case 'TEST_STRATEGY':
+      return [
+        'Test pyramid defined (unit/integration/e2e ratio)',
+        'Coverage targets set (70-80% minimum)',
+        'Critical paths have test scenarios',
+        'Automation strategy documented',
+        'Testing timeline and effort estimated',
+      ];
+    case 'ARCH_DECISION':
+      return [
+        '2-3 options with trade-offs documented',
+        'Selected architecture fits requirements',
+        'Technology choices justified for team',
+        'Deployment and operational plan clear',
+        'Scaling roadmap defined',
+      ];
+    case 'MONITORING_SETUP':
+      return [
+        'Key metrics defined with thresholds',
+        'Alert rules created (not noisy)',
+        'Logging schema and retention defined',
+        'Dashboards cover ops, business, development views',
+        'SLO/SLI targets set',
       ];
     default:
       return [

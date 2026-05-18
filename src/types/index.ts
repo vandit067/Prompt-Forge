@@ -8,7 +8,12 @@ export type TaskType =
   | 'DESIGN_DECISION'
   | 'PERF_OPTIMIZATION'
   | 'DATA_INTEGRATION'
-  | 'DOC_OR_SPEC';
+  | 'DOC_OR_SPEC'
+  | 'API_DESIGN'
+  | 'SECURITY_AUDIT'
+  | 'TEST_STRATEGY'
+  | 'ARCH_DECISION'
+  | 'MONITORING_SETUP';
 
 export type TaskStatus = 'pending' | 'success' | 'error';
 
@@ -95,4 +100,9 @@ export const TASK_TYPE_CONFIG: Record<TaskType, TaskTypeConfig> = {
   PERF_OPTIMIZATION:  { label: 'PERF',                color: '#f9a8d4', bg: '#5f1d3b' },
   DATA_INTEGRATION:   { label: 'DATA',                color: '#67e8f9', bg: '#0f3d4a' },
   DOC_OR_SPEC:        { label: 'DOC_OR_SPEC',         color: '#a1a1aa', bg: '#27272a' },
+  API_DESIGN:         { label: 'API_DESIGN',          color: '#94a3b8', bg: '#1e293b' },
+  SECURITY_AUDIT:     { label: 'SECURITY',            color: '#e7755e', bg: '#3b1f15' },
+  TEST_STRATEGY:      { label: 'TEST',                color: '#84cc16', bg: '#3f4900' },
+  ARCH_DECISION:      { label: 'ARCH',                color: '#fb923c', bg: '#5a2e0a' },
+  MONITORING_SETUP:   { label: 'MONITORING',          color: '#ec4899', bg: '#3f1f40' },
 };

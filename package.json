@@ -12,7 +12,11 @@
     "preview": "vite preview",
     "electron:bundle": "esbuild electron/main.js --bundle --platform=node --target=node20 --outfile=electron/main.cjs --external:electron --external:better-sqlite3 --format=cjs",
     "electron:dev": "npm run electron:bundle && concurrently -n vite,api,electron -c green,cyan,blue \"vite\" \"node --env-file=.env server/index.js\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "npm run build && npm run electron:bundle && electron-builder --mac",
+    "electron:build": "npm run build && npm run electron:bundle && electron-builder",
+    "electron:build:mac": "npm run build && npm run electron:bundle && electron-builder --mac",
+    "electron:build:win": "npm run build && npm run electron:bundle && electron-builder --win",
+    "electron:build:linux": "npm run build && npm run electron:bundle && electron-builder --linux",
+    "electron:build:all": "npm run build && npm run electron:bundle && electron-builder -mwl",
     "electron:rebuild": "electron-rebuild -f -w better-sqlite3"
   },
   "dependencies": {

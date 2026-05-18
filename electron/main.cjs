@@ -30813,6 +30813,9 @@ var init_db = __esm({
     UPDATE tasks SET status = @status, error_notes = @error_notes, updated_at = @updated_at
     WHERE id = @id
   `),
+      deleteTask: db.prepare(`
+    DELETE FROM tasks WHERE id = @id
+  `),
       insertFailure: db.prepare(`
     INSERT INTO failures (task_id, error_type, notes) VALUES (?, ?, ?)
   `),
@@ -33007,6 +33010,14 @@ ${userRules.map((r) => `- ${r}`).join("\n")}` : "";
         res.status(500).json({ error: err.message });
       }
     });
+    app.delete("/api/tasks/:id", (req, res) => {
+      try {
+        stmts.deleteTask.run({ id: req.params.id });
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
     app.post("/api/tasks/:id/refine", async (req, res) => {
       const { refinement, userRules } = req.body;
       const taskId = req.params.id;
@@ -33119,8 +33130,10 @@ var startServer2;
 var stopServer2;
 var mainWindow = null;
 async function createWindow() {
-  ({ startServer: startServer2, stopServer: stopServer2 } = await Promise.resolve().then(() => (init_server(), server_exports)));
-  await startServer2();
+  if (!isDev) {
+    ({ startServer: startServer2, stopServer: stopServer2 } = await Promise.resolve().then(() => (init_server(), server_exports)));
+    await startServer2();
+  }
   const appPath = isDev ? process.cwd() : import_electron.app.getAppPath();
   const preloadPath = import_path22.default.join(appPath, "electron", "preload.js");
   const distPath = import_path22.default.join(appPath, "dist", "index.html");
@@ -33153,7 +33166,7 @@ async function createWindow() {
 }
 import_electron.app.whenReady().then(createWindow);
 import_electron.app.on("window-all-closed", async () => {
-  if (stopServer2) await stopServer2();
+  if (stopServer2 && !isDev) await stopServer2();
   if (process.platform !== "darwin") import_electron.app.quit();
 });
 import_electron.app.on("activate", () => {
@@ -33161,12 +33174,12 @@ import_electron.app.on("activate", () => {
 });
 process.on("SIGTERM", async () => {
   console.log("[main] received SIGTERM, shutting down");
-  if (stopServer2) await stopServer2();
+  if (stopServer2 && !isDev) await stopServer2();
   import_electron.app.quit();
 });
 process.on("SIGINT", async () => {
   console.log("[main] received SIGINT, shutting down");
-  if (stopServer2) await stopServer2();
+  if (stopServer2 && !isDev) await stopServer2();
   import_electron.app.quit();
 });
 /*! Bundled license information:

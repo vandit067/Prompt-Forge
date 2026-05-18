@@ -10,11 +10,13 @@ let startServer, stopServer;
 let mainWindow = null;
 
 async function createWindow() {
-  // Import server functions dynamically to ensure ELECTRON_USER_DATA is set first
-  ({ startServer, stopServer } = await import('../server/index.js'));
-
-  // Start Express server
-  await startServer();
+  // In production, start the server. In dev, it's already running as a separate process.
+  if (!isDev) {
+    // Import server functions dynamically to ensure ELECTRON_USER_DATA is set first
+    ({ startServer, stopServer } = await import('../server/index.js'));
+    // Start Express server
+    await startServer();
+  }
 
   // In dev mode, appPath is the root directory; in production it's the app bundle
   const appPath = isDev ? process.cwd() : app.getAppPath();
@@ -55,7 +57,8 @@ async function createWindow() {
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', async () => {
-  if (stopServer) await stopServer();
+  // Only stop server in production (in dev it's a separate process)
+  if (stopServer && !isDev) await stopServer();
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -65,12 +68,12 @@ app.on('activate', () => {
 
 process.on('SIGTERM', async () => {
   console.log('[main] received SIGTERM, shutting down');
-  if (stopServer) await stopServer();
+  if (stopServer && !isDev) await stopServer();
   app.quit();
 });
 
 process.on('SIGINT', async () => {
   console.log('[main] received SIGINT, shutting down');
-  if (stopServer) await stopServer();
+  if (stopServer && !isDev) await stopServer();
   app.quit();
 });

@@ -92,6 +92,10 @@ export const stmts = {
     WHERE id = @id
   `),
 
+  deleteTask: db.prepare(`
+    DELETE FROM tasks WHERE id = @id
+  `),
+
   insertFailure: db.prepare(`
     INSERT INTO failures (task_id, error_type, notes) VALUES (?, ?, ?)
   `),

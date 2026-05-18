@@ -149,6 +149,20 @@ export default function App() {
     }
   }
 
+  async function handleClearAllTasks() {
+    const tasksToDelete = tasks.map(t => t.id);
+    setTasks([]);
+    setSelectedTaskId(null);
+    try {
+      await Promise.all(tasksToDelete.map(id => api.deleteTask(id)));
+    } catch (err) {
+      console.error('Failed to clear all tasks:', err);
+      // Reload tasks on error
+      const allTasks = await api.getTasks();
+      setTasks(allTasks);
+    }
+  }
+
   async function handleRefine(taskId: string, refinement: string) {
     try {
       const updated = await api.refine(taskId, refinement, userRules);
@@ -255,6 +269,7 @@ export default function App() {
         onNavigate={handleNavigate}
         onSelectTask={handleSelectTask}
         onDeleteTask={handleDeleteTask}
+        onClearAllTasks={handleClearAllTasks}
         dbReady={dbReady}
       />
       {renderMain()}

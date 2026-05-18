@@ -13,6 +13,7 @@ interface Props {
   onNavigate: (screen: Screen) => void;
   onSelectTask: (taskId: string) => void;
   onDeleteTask?: (taskId: string) => Promise<void>;
+  onClearAllTasks?: () => Promise<void>;
   dbReady?: boolean;
 }
 
@@ -39,12 +40,14 @@ const NAV_ITEMS = [
 
 const ALL_TYPES = Object.keys(TASK_TYPE_CONFIG) as TaskType[];
 
-export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSelectTask, onDeleteTask, dbReady = true }: Props) {
+export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSelectTask, onDeleteTask, onClearAllTasks, dbReady = true }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'success' | 'error'>('all');
   const [typeFilter, setTypeFilter] = useState<TaskType | 'all'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
 
   const filtered = tasks.filter(t => {
     const matchesSearch = search === '' ||
@@ -367,6 +370,27 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
             <X size={10} /> clear
           </button>
         )}
+        {onClearAllTasks && tasks.length > 0 && (
+          <button
+            onClick={() => setShowClearAllConfirm(true)}
+            disabled={isClearing}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#52525b',
+              fontSize: '10px',
+              cursor: isClearing ? 'not-allowed' : 'pointer',
+              fontFamily: '"JetBrains Mono", monospace',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '3px',
+              opacity: isClearing ? 0.6 : 1,
+            }}
+          >
+            <X size={10} /> clear all
+          </button>
+        )}
       </div>
 
       {/* Task list */}
@@ -481,6 +505,97 @@ export function Sidebar({ tasks, currentScreen, selectedTaskId, onNavigate, onSe
           })
         )}
       </div>
+
+      {/* Clear All Confirmation Dialog */}
+      {showClearAllConfirm && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => !isClearing && setShowClearAllConfirm(false)}
+        >
+          <div
+            style={{
+              background: colors.bgMuted,
+              border: `1px solid ${colors.border}`,
+              borderRadius: radius.lg,
+              padding: space.lg,
+              width: '100%',
+              maxWidth: '320px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: 600, color: colors.fg }}>
+              Clear All Tasks?
+            </h3>
+            <p style={{ margin: '0 0 16px', fontSize: '12px', color: colors.fgDim, lineHeight: 1.5 }}>
+              This will permanently delete all {tasks.length} task{tasks.length !== 1 ? 's' : ''}. This action cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: space.sm, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowClearAllConfirm(false)}
+                disabled={isClearing}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: radius.md,
+                  border: `1px solid ${colors.border}`,
+                  background: 'transparent',
+                  color: colors.fg,
+                  fontSize: '12px',
+                  cursor: isClearing ? 'not-allowed' : 'pointer',
+                  fontFamily: fonts.mono,
+                  transition: transitions.fast,
+                  opacity: isClearing ? 0.6 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setIsClearing(true);
+                  try {
+                    if (onClearAllTasks) {
+                      await onClearAllTasks();
+                    }
+                  } finally {
+                    setShowClearAllConfirm(false);
+                    setIsClearing(false);
+                  }
+                }}
+                disabled={isClearing}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: radius.md,
+                  border: 'none',
+                  background: '#ef4444',
+                  color: '#fff',
+                  fontSize: '12px',
+                  cursor: isClearing ? 'not-allowed' : 'pointer',
+                  fontFamily: fonts.mono,
+                  fontWeight: 600,
+                  transition: transitions.fast,
+                  opacity: isClearing ? 0.7 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isClearing) (e.currentTarget as HTMLButtonElement).style.background = '#dc2626';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.background = '#ef4444';
+                }}
+              >
+                {isClearing ? 'Clearing…' : 'Clear All'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

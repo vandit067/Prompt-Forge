@@ -164,7 +164,7 @@ function OptimizationPanel({ result, onClose }: { result: OptimizationResult; on
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', marginBottom: '8px' }}>
                 <span
                   style={{
-                    display: 'inline-block',
+                    display: 'flex',
                     width: '24px',
                     height: '24px',
                     borderRadius: '4px',
@@ -174,7 +174,6 @@ function OptimizationPanel({ result, onClose }: { result: OptimizationResult; on
                         : suggestion.severity === 'medium'
                           ? '#5f3e0a'
                           : '#1c3c1a',
-                    display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
@@ -591,9 +590,13 @@ function RefinementPanel({ task, onRefine }: RefinementPanelProps) {
 interface OutputPanelProps {
   task: Task;
   defaultTab?: OutputTab;
+  optimizingPromptId: string | null;
+  setOptimizingPromptId: (id: string | null) => void;
+  optimizationResults: Record<string, OptimizationResult>;
+  setOptimizationResults: (results: Record<string, OptimizationResult> | ((prev: Record<string, OptimizationResult>) => Record<string, OptimizationResult>)) => void;
 }
 
-function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
+function OutputPanel({ task, defaultTab = 'prompts', optimizingPromptId, setOptimizingPromptId, optimizationResults, setOptimizationResults }: OutputPanelProps) {
   const [activeTab, setActiveTab] = useState<OutputTab>(defaultTab);
   const [copiedAll, setCopiedAll] = useState(false);
 
@@ -2741,7 +2744,13 @@ export function CommandCenter({
                 ×
               </button>
             </div>
-            <OutputPanel task={selectedTask} />
+            <OutputPanel
+              task={selectedTask}
+              optimizingPromptId={optimizingPromptId}
+              setOptimizingPromptId={setOptimizingPromptId}
+              optimizationResults={optimizationResults}
+              setOptimizationResults={setOptimizationResults}
+            />
             {onRefine && <RefinementPanel task={selectedTask} onRefine={onRefine} />}
           </div>
         ) : (
@@ -2825,6 +2834,8 @@ export function TaskDetail({ task, onUpdateStatus, onRetry }: TaskDetailProps) {
   const [savedStatus, setSavedStatus] = useState<'success' | 'error' | null>(
     task.status === 'pending' ? null : task.status
   );
+  const [optimizingPromptId, setOptimizingPromptId] = useState<string | null>(null);
+  const [optimizationResults, setOptimizationResults] = useState<Record<string, OptimizationResult>>({});
 
   function handleWorked() {
     setSavedStatus('success');
@@ -2882,7 +2893,13 @@ export function TaskDetail({ task, onUpdateStatus, onRetry }: TaskDetailProps) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <OutputPanel task={task} />
+        <OutputPanel
+          task={task}
+          optimizingPromptId={optimizingPromptId}
+          setOptimizingPromptId={setOptimizingPromptId}
+          optimizationResults={optimizationResults}
+          setOptimizationResults={setOptimizationResults}
+        />
 
         {/* Feedback section */}
         <div

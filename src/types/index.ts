@@ -21,7 +21,7 @@ export type Screen = 'command-center' | 'analytics' | 'settings' | 'task-detail'
 
 export type Backend = 'anthropic' | 'ollama' | 'script';
 
-export type Model = 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5';
+export type Model = 'claude-opus-4-7' | 'claude-sonnet-4-6' | 'claude-haiku-4-5' | 'claude-haiku-4-5-20251001';
 
 export interface AppSettings {
   // API Configuration

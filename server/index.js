@@ -586,6 +586,16 @@ app.patch('/api/tasks/:id', (req, res) => {
   }
 });
 
+// DELETE /api/tasks/:id — delete a task
+app.delete('/api/tasks/:id', (req, res) => {
+  try {
+    stmts.deleteTask.run({ id: req.params.id });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/tasks/:id/refine — refine existing task prompts with new instructions
 app.post('/api/tasks/:id/refine', async (req, res) => {
   const { refinement, userRules } = req.body;

@@ -1,9 +1,35 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw } from 'lucide-react';
+import { Send, FolderOpen, Zap, ChevronDown, ChevronUp, CheckSquare, FileText, List, Download, RefreshCw, Copy, FileJson, Code } from 'lucide-react';
 import { TaskTypePill } from '../components/TaskTypePill';
 import { CopyButton } from '../components/CopyButton';
 import { colors, fonts, radius, space, transitions } from '../lib/designSystem';
 import type { Task, OutputTab, ProjectMode, ScannedContext, ActiveBackend } from '../types';
+
+/* ─── File Utilities ─── */
+function getFileTypeIcon(filename: string) {
+  if (filename.endsWith('.json')) return <FileJson size={14} />;
+  if (filename.endsWith('.md')) return <FileText size={14} />;
+  if (filename.endsWith('.ts') || filename.endsWith('.tsx') || filename.endsWith('.js')) return <Code size={14} />;
+  return <FileText size={14} />;
+}
+
+function getFileTypeColor(filename: string) {
+  if (filename.endsWith('.json')) return '#3b82f6'; // blue
+  if (filename.endsWith('.md')) return '#f59e0b'; // amber
+  if (filename.endsWith('.ts') || filename.endsWith('.tsx')) return '#8b5cf6'; // purple
+  if (filename.endsWith('.js')) return '#fbbf24'; // yellow
+  return '#6b7280'; // gray
+}
+
+function downloadFile(filename: string, content: string) {
+  const element = document.createElement('a');
+  element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(content));
+  element.setAttribute('download', filename);
+  element.style.display = 'none';
+  document.body.appendChild(element);
+  element.click();
+  document.body.removeChild(element);
+}
 
 /* ─── Prompt Quality Scorer ─── */
 interface QualityScore {
@@ -448,47 +474,107 @@ function OutputPanel({ task, defaultTab = 'prompts' }: OutputPanelProps) {
             {task.generatedFiles.length === 0 ? (
               <EmptyTabState message="No supporting files generated for this task type." />
             ) : (
-              task.generatedFiles.map(file => (
-                <div
-                  key={file.id}
-                  style={{
-                    background: '#0a0a0d',
-                    border: '1px solid #1c1c22',
-                    borderRadius: '8px',
-                    overflow: 'hidden',
-                  }}
-                >
+              task.generatedFiles.map(file => {
+                const fileColor = getFileTypeColor(file.filename);
+                const icon = getFileTypeIcon(file.filename);
+                return (
                   <div
+                    key={file.id}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 14px',
-                      borderBottom: '1px solid #1c1c22',
-                      background: '#0f0f12',
+                      background: '#0a0a0d',
+                      border: `1px solid ${fileColor}33`,
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s ease',
                     }}
                   >
-                    <span style={{ fontSize: '11px', fontFamily: '"JetBrains Mono", monospace', color: '#22c55e', fontWeight: 500 }}>
-                      📄 {file.filename}
-                    </span>
-                    <CopyButton text={file.content} />
+                    {/* File Header */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderBottom: `2px solid ${fileColor}33`,
+                        background: `linear-gradient(135deg, #0f0f12 0%, ${fileColor}11 100%)`,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ color: fileColor }}>
+                          {icon}
+                        </span>
+                        <span style={{
+                          fontSize: '12px',
+                          fontFamily: '"JetBrains Mono", monospace',
+                          color: fileColor,
+                          fontWeight: 600,
+                        }}>
+                          {file.filename}
+                        </span>
+                        <span style={{
+                          fontSize: '10px',
+                          color: '#6b7280',
+                          marginLeft: '8px',
+                        }}>
+                          {Math.round(file.content.length / 1024 * 10) / 10}KB
+                        </span>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button
+                          onClick={() => downloadFile(file.filename, file.content)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '6px 10px',
+                            background: fileColor + '20',
+                            border: `1px solid ${fileColor}40`,
+                            borderRadius: '4px',
+                            color: fileColor,
+                            fontSize: '11px',
+                            fontFamily: '"JetBrains Mono", monospace',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={e => {
+                            (e.currentTarget as HTMLButtonElement).style.background = fileColor + '30';
+                            (e.currentTarget as HTMLButtonElement).style.borderColor = fileColor + '60';
+                          }}
+                          onMouseLeave={e => {
+                            (e.currentTarget as HTMLButtonElement).style.background = fileColor + '20';
+                            (e.currentTarget as HTMLButtonElement).style.borderColor = fileColor + '40';
+                          }}
+                        >
+                          <Download size={12} />
+                          Download
+                        </button>
+                        <CopyButton text={file.content} />
+                      </div>
+                    </div>
+
+                    {/* File Content */}
+                    <pre
+                      style={{
+                        margin: 0,
+                        padding: '16px',
+                        fontFamily: '"JetBrains Mono", monospace',
+                        fontSize: '12px',
+                        lineHeight: '1.6',
+                        color: '#d4d4d8',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        maxHeight: '400px',
+                        overflowY: 'auto',
+                        background: '#0f0f12',
+                      }}
+                    >
+                      {file.content}
+                    </pre>
                   </div>
-                  <pre
-                    style={{
-                      margin: 0,
-                      padding: '14px',
-                      fontFamily: '"JetBrains Mono", monospace',
-                      fontSize: '12px',
-                      lineHeight: '1.7',
-                      color: '#d4d4d8',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {file.content}
-                  </pre>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}

@@ -62,47 +62,74 @@ function buildPrompts(input: string, type: TaskType): GeneratedPrompt[] {
         {
           id: uid(),
           sessionLabel: 'Session 1 — Scaffold & Core Setup',
-          content: `Context: ${goal}. Starting from scratch.
+          content: `Role: Full-stack engineer building greenfield products
 
-Steps:
+Context: ${goal}. Starting from scratch.
+
+Goal: Complete a working scaffold with core happy-path functionality and zero TypeScript errors
+
+---
+
+Steps (in order):
 1. Initialize project with appropriate scaffold (Vite/npm init/etc.)
 2. Install core dependencies
 3. Create entry point, main module, and types files
 4. Implement the basic happy-path functionality
 5. Test manually: verify the core function works end-to-end
 
-Constraints:
-- TypeScript strict mode, no \`any\`
+Key Constraints (ordered by importance):
+- [CRITICAL] TypeScript strict mode, no \`any\`
+- [CRITICAL] Small commits per step — atomic changes only
 - No paid APIs — all processing is local
-- Small commits per step
 
-Verification:
-- Core feature works with valid input
-- npx tsc --noEmit → zero errors
-- Manual smoke test passes`,
+Expected Output:
+- Running dev server with zero TypeScript errors
+- Core function works end-to-end with valid input
+- 3-4 commits with clear messages following conventional commits
+
+---
+
+Verification Checklist:
+□ Core feature works with valid input
+□ npx tsc --noEmit → zero errors
+□ Manual smoke test passes`,
         },
         {
           id: uid(),
           sessionLabel: 'Session 2 — Feature Completion',
-          content: `Context: Scaffold from Session 1 works. Now adding the remaining features for: ${goal}.
+          content: `Role: Feature engineer optimizing for correctness and testability
 
-Steps:
+Context: Scaffold from Session 1 works. Now adding the remaining features for: ${goal}.
+
+Goal: Implement all secondary features with comprehensive error handling and test coverage
+
+---
+
+Steps (in order):
 1. Read every file created in Session 1 before making changes
 2. Implement secondary features one at a time
 3. Add error handling for edge cases (empty input, missing files, invalid types)
 4. Write unit tests for the core logic
 5. Update CLI/API interface to expose all functionality
 
-Constraints:
-- Diagnose before mutate — read existing code first
-- Zod validation at all user input boundaries
+Key Constraints (ordered by importance):
+- [CRITICAL] Diagnose before mutate — read existing code first
+- [CRITICAL] Zod validation at all user input boundaries
 - Reuse existing utilities — never reinvent
 
-Verification:
-- All features work with valid input
-- Edge cases handled gracefully
-- npm test → all tests pass
-- npx tsc --noEmit → zero errors`,
+Expected Output:
+- All features working with valid input
+- Edge cases handled with meaningful error messages
+- Unit test suite with ≥ 80% coverage of core logic
+- Updated interface documentation
+
+---
+
+Verification Checklist:
+□ All features work with valid input
+□ Edge cases handled gracefully
+□ npm test → all tests pass
+□ npx tsc --noEmit → zero errors`,
         },
       ];
 
@@ -111,25 +138,39 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Diagnose & Fix',
-          content: `Context: ${goal}.
+          content: `Role: Debugging specialist focused on root cause identification and minimal fixes
 
-Steps:
+Context: ${goal}.
+
+Goal: Identify the root cause and apply a targeted fix with a regression test, zero regressions
+
+---
+
+Steps (in order):
 1. Read the relevant component/module and its dependencies — understand current behavior
 2. Add targeted logging to reproduce the exact failure path
 3. Identify root cause (state mutation, off-by-one, async race, wrong comparison, null dereference)
 4. Apply the minimal targeted fix — do NOT refactor surrounding code
 5. Add a regression test that would have caught this bug
 
-Constraints:
-- Diagnose before mutate — no code changes in steps 1-2
-- Fix only the broken path — no cleanup or refactoring in the same commit
+Key Constraints (ordered by importance):
+- [CRITICAL] Diagnose before mutate — no code changes in steps 1-2
+- [CRITICAL] Fix only the broken path — no cleanup or refactoring in the same commit
 - Regression test: must fail before fix, pass after
 
-Verification:
-- Original bug scenario no longer reproduces
-- Regression test passes
-- No other tests broke
-- npx tsc --noEmit → zero errors`,
+Expected Output:
+- Clear explanation of the root cause with evidence
+- Minimal fix (usually ≤ 5 lines changed)
+- One regression test that fails before, passes after
+- All existing tests still passing
+
+---
+
+Verification Checklist:
+□ Original bug scenario no longer reproduces
+□ Regression test passes
+□ No other tests broke
+□ npx tsc --noEmit → zero errors`,
         },
       ];
 
@@ -138,25 +179,39 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Session 1 — Implement Feature',
-          content: `Context: ${goal}.
+          content: `Role: Feature engineer optimizing for consistency and maintainability
 
-Steps:
+Context: ${goal}.
+
+Goal: Implement the feature following existing patterns, with all edge cases handled and tests passing
+
+---
+
+Steps (in order):
 1. Grep for similar existing features/components — read them before writing anything
 2. Design the data structure or component interface first (types + function signatures)
 3. Implement the feature in isolation (new component/function/module)
 4. Integrate with the existing system
 5. Test the full flow manually
 
-Constraints:
-- Reuse existing utilities — don't reinvent
-- TypeScript strict, Zod at all data boundaries
+Key Constraints (ordered by importance):
+- [CRITICAL] Reuse existing utilities — don't reinvent
+- [CRITICAL] TypeScript strict, Zod at all data boundaries
 - Update SPEC.md if the system shape changes
 
-Verification:
+Expected Output:
 - Feature works in the happy path
-- Loading, error, and empty states handled
-- Existing tests still pass
-- npx tsc --noEmit → zero errors`,
+- Loading, error, and empty states all handled
+- All existing tests still pass
+- New tests if the feature is user-facing
+
+---
+
+Verification Checklist:
+□ Feature works in the happy path
+□ Loading, error, and empty states handled
+□ Existing tests still pass
+□ npx tsc --noEmit → zero errors`,
         },
       ];
 
@@ -165,9 +220,15 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Structured Code Review',
-          content: `Context: Review requested — ${goal}.
+          content: `Role: Senior code reviewer focused on security, correctness, and maintainability
 
-Steps:
+Context: Review requested — ${goal}.
+
+Goal: Complete a structured security and correctness review with actionable findings, no BLOCKERS on merge
+
+---
+
+Steps (in order):
 1. Read all relevant files fully before commenting
 2. Correctness: does the code do what it claims? Are edge cases covered?
 3. Security: input validation, SQL/command injection, secrets in code, auth checks
@@ -175,16 +236,23 @@ Steps:
 5. Maintainability: naming clarity, function length (<50 lines), duplication, complexity
 6. Output structured review — one entry per finding
 
-Format each finding as:
-[SEVERITY] File:line — Description. Suggested fix.
+Key Constraints (ordered by importance):
+- [CRITICAL] Flag any hardcoded secrets immediately as BLOCKER
+- [CRITICAL] Blockers must include a specific suggested fix
+- Focus on items that will cause production issues, not style
 
-Severity levels: BLOCKER / MAJOR / MINOR / NIT
+Expected Output:
+- One review entry per finding with format: [SEVERITY] File:line — Description. Suggested fix.
+- Severity levels: BLOCKER / MAJOR / MINOR / NIT
+- "Top 3 Blockers" summary at the end
+- "Approved" status if no BLOCKERS remain
 
-End with "Top 3 Blockers" section.
+---
 
-Constraints:
-- Blockers must include a specific suggested fix
-- Flag any hardcoded secrets immediately as BLOCKER`,
+Verification Checklist:
+□ All BLOCKER findings addressed before merging
+□ No hardcoded secrets in reviewed code
+□ Top 3 blockers documented with fixes`,
         },
       ];
 
@@ -193,25 +261,39 @@ Constraints:
         {
           id: uid(),
           sessionLabel: 'Session 1 — Characterize & Add Tests',
-          content: `Context: ${goal}.
+          content: `Role: Refactoring specialist focused on structure, not behavior
 
-Steps:
+Context: ${goal}.
+
+Goal: Add characterization tests and make one structural improvement without changing behavior
+
+---
+
+Steps (in order):
 1. Read all files in scope — write a 1-sentence description of each function/component
 2. Identify: functions >50 lines, duplicated logic, unclear naming, mixed concerns
 3. Write characterization tests for current behavior BEFORE any changes
 4. Make one rename or extract (the safest change) — nothing else
 5. Run tests to verify behavior unchanged
 
-Constraints:
-- Tests must exist BEFORE any refactoring starts
+Key Constraints (ordered by importance):
+- [CRITICAL] Tests must exist BEFORE any refactoring starts
+- [CRITICAL] No behavior changes — structure only in this session
 - One change type per commit: rename, extract, or move (not mixed)
-- No behavior changes — structure only in this session
 
-Verification:
-- All existing tests pass
-- Characterization tests pass
-- No observable behavior change
-- npx tsc --noEmit → zero errors`,
+Expected Output:
+- Characterization tests for current behavior
+- One refactoring commit (rename, extract, or move)
+- All tests passing
+- Before/after code complexity comparison
+
+---
+
+Verification Checklist:
+□ All existing tests pass
+□ Characterization tests pass
+□ No observable behavior change
+□ npx tsc --noEmit → zero errors`,
         },
       ];
 
@@ -220,24 +302,38 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Investigate & Report',
-          content: `Context: ${goal}.
+          content: `Role: Debugging specialist focused on root cause investigation (not fixing)
 
-Steps:
+Context: ${goal}.
+
+Goal: Identify the root cause through systematic hypothesis testing with reproducible evidence
+
+---
+
+Steps (in order):
 1. Collect observable data: error messages, stack traces, reproduction steps
 2. Form 2-3 hypotheses ranked by likelihood
 3. Identify the cheapest discriminating test for each hypothesis
 4. Execute tests to confirm/rule out each hypothesis
 5. Report: confirmed root cause, evidence, recommended fix
 
-Constraints:
-- Don't implement a fix in this session — investigate only
-- Each hypothesis must be testable (not "maybe it's a timing issue")
+Key Constraints (ordered by importance):
+- [CRITICAL] Don't implement a fix in this session — investigate only
+- [CRITICAL] Each hypothesis must be testable (not "maybe it's a timing issue")
 - Report format: Hypothesis → Test → Result → Conclusion
 
-Verification:
-- Root cause identified with supporting evidence
-- You can reproduce the issue consistently
-- Recommended fix is concrete and actionable`,
+Expected Output:
+- List of 2-3 hypotheses with likelihood ranking
+- Test results for each hypothesis
+- Confirmed root cause with supporting evidence
+- Concrete recommended fix (don't implement it, just specify it)
+
+---
+
+Verification Checklist:
+□ Root cause identified with supporting evidence
+□ You can reproduce the issue consistently
+□ Recommended fix is concrete and actionable`,
         },
       ];
 
@@ -246,22 +342,37 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Trade-off Analysis & Recommendation',
-          content: `Context: Decision needed — ${goal}.
+          content: `Role: Architect making trade-off decisions with clear decision criteria
 
-Steps:
+Context: Decision needed — ${goal}.
+
+Goal: Recommend one option with clear trade-offs and a ready-to-use implementation prompt
+
+---
+
+Steps (in order):
 1. Identify 2-3 concrete options
 2. For each option, list: pros, cons, known failure modes, migration cost
 3. State your recommendation with a 1-sentence rationale
 4. Generate a ready-to-paste prompt for implementing the chosen option
 
-Constraints:
-- Recommendation must be concrete — no "it depends" without a decision framework
-- Consider: team familiarity, ecosystem maturity, bundle size, future flexibility
+Key Constraints (ordered by importance):
+- [CRITICAL] Recommendation must be concrete — no "it depends" without a decision framework
+- [CRITICAL] Consider: team familiarity, ecosystem maturity, bundle size, future flexibility
+- All options must have concrete trade-offs, not marketing copy
 
-Verification:
-- All options have concrete trade-offs (not just marketing copy)
-- Recommendation is actionable
-- Implementation prompt for the chosen path is included`,
+Expected Output:
+- 2-3 options with pros/cons/failure modes/migration cost per option
+- Clear recommendation with 1-sentence rationale
+- Ready-to-paste implementation prompt for the chosen option
+- Decision framework explaining how to choose if requirements change
+
+---
+
+Verification Checklist:
+□ All options have concrete trade-offs (not just marketing copy)
+□ Recommendation is actionable
+□ Implementation prompt for the chosen path is included`,
         },
       ];
 
@@ -270,29 +381,50 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Session 1 — Diagnose (no code changes)',
-          content: `Context: ${goal}. Diagnose before optimizing.
+          content: `Role: Performance engineer focused on measurement before optimization
 
-Steps:
+Context: ${goal}. Diagnose before optimizing.
+
+Goal: Identify and quantify the top 3 bottlenecks with before-state measurements
+
+---
+
+Steps (in order):
 1. Chrome DevTools → Network → disable cache → hard reload → screenshot waterfall
 2. Mark the 3 largest requests and any sequential chains that could run in parallel
 3. Performance tab → record 5s → screenshot long tasks (>50ms, shown red)
 4. Run: npx vite-bundle-visualizer (or equivalent) → screenshot
 5. Output: list of top 3 bottlenecks with sizes and timings
 
-Constraints:
-- Do NOT change any code in this session — diagnose only
-- Capture before-state screenshots for before/after comparison
+Key Constraints (ordered by importance):
+- [CRITICAL] Do NOT change any code in this session — diagnose only
+- [CRITICAL] Capture before-state screenshots for before/after comparison
+- All measurements must be quantified (not "seems slow")
 
-Verification:
-- List of ≥ 3 bottlenecks with measurements exists
-- You can explain the critical path request chain`,
+Expected Output:
+- Network waterfall screenshot with 3 largest requests marked
+- Performance profile screenshot showing long tasks
+- Bundle size breakdown
+- Prioritized bottleneck list with sizes and timings
+
+---
+
+Verification Checklist:
+□ List of ≥ 3 bottlenecks with measurements exists
+□ You can explain the critical path request chain`,
         },
         {
           id: uid(),
           sessionLabel: 'Session 2 — Targeted Optimization',
-          content: `Context: Bottlenecks from Session 1 identified. Now fixing them in order of impact.
+          content: `Role: Performance engineer fixing measured bottlenecks
 
-Steps:
+Context: Bottlenecks from Session 1 identified. Now fixing them in order of impact.
+
+Goal: Address top 3 bottlenecks with measurable improvement, zero regressions
+
+---
+
+Steps (in order):
 1. Address bottleneck #1 (likely: large bundle or sequential requests)
    - Large bundle → React.lazy() + Suspense for heavy routes
    - Sequential fetches → Promise.all() or batched endpoint
@@ -300,14 +432,22 @@ Steps:
 3. Address bottleneck #3: lazy-load images below the fold
 4. Re-run Lighthouse → compare to baseline
 
-Constraints:
-- One fix per commit with before/after measurements in the commit message
-- Only address measured bottlenecks — no speculative optimization
+Key Constraints (ordered by importance):
+- [CRITICAL] Only address measured bottlenecks — no speculative optimization
+- [CRITICAL] One fix per commit with before/after measurements in the commit message
+- Test the full user flow after each change to catch regressions
 
-Verification:
-- First load ≤ 1.5s on throttled 4G in Chrome DevTools
-- LCP score improved vs baseline
-- No regressions (test the full user flow after changes)`,
+Expected Output:
+- Updated performance waterfall showing improvements
+- Before/after Lighthouse scores
+- Commit messages with quantified improvements
+
+---
+
+Verification Checklist:
+□ First load ≤ 1.5s on throttled 4G in Chrome DevTools
+□ LCP score improved vs baseline
+□ No regressions (test the full user flow after changes)`,
         },
       ];
 
@@ -316,9 +456,15 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Session 1 — Mock-First Integration',
-          content: `Context: ${goal}. Mock-first approach to decouple UI from API availability.
+          content: `Role: Full-stack engineer building UI-first with decoupled API
 
-Steps:
+Context: ${goal}. Mock-first approach to decouple UI from API availability.
+
+Goal: Build working UI with mock data, ready for real API wiring in Session 2
+
+---
+
+Steps (in order):
 1. Define the data shape as TypeScript types first (before any API calls)
 2. Create src/mocks/${uid()}.ts with realistic mock data matching the shape
 3. Create src/services/dataService.ts with MOCK_MODE flag:
@@ -326,16 +472,24 @@ Steps:
 4. Build the UI component against the mock data
 5. Add [MOCK] badge visible in UI when MOCK_MODE is active
 
-Constraints:
-- MOCK_MODE=true by default until real API is ready
-- Never commit API keys or credentials — use env vars only
+Key Constraints (ordered by importance):
+- [CRITICAL] Never commit API keys or credentials — use env vars only
+- [CRITICAL] MOCK_MODE=true by default until real API is ready
 - Skip any scanned files containing credentials (flag them)
 
-Verification:
-- UI renders correctly with mock data
-- [MOCK] badge visible
-- Switching MOCK_MODE=false calls the real endpoint
-- No credentials in version control`,
+Expected Output:
+- TypeScript types for the data shape
+- Mock data file with realistic test data
+- Data service with MOCK_MODE toggle
+- UI component rendering mock data correctly
+
+---
+
+Verification Checklist:
+□ UI renders correctly with mock data
+□ [MOCK] badge visible
+□ Switching MOCK_MODE=false calls the real endpoint
+□ No credentials in version control`,
         },
       ];
 
@@ -344,9 +498,15 @@ Verification:
         {
           id: uid(),
           sessionLabel: 'Write Documentation',
-          content: `Context: ${goal}. Writing for engineers new to the project.
+          content: `Role: Technical writer making the subject understandable for newcomers
 
-Steps:
+Context: ${goal}. Writing for engineers new to the project.
+
+Goal: Create complete documentation so a new engineer can understand and use this in < 10 min
+
+---
+
+Steps (in order):
 1. grep -r the subject across src/ to identify all relevant files
 2. Identify: purpose, key components, configuration, common failure modes
 3. Write docs/<subject>.md with:
@@ -356,15 +516,23 @@ Steps:
    - Troubleshooting (top 3 failure modes + fixes)
 4. Add JSDoc to any public functions lacking documentation
 
-Constraints:
-- Audience: engineers new to the project
-- Every code example must compile and run
-- Keep overview ≤ 200 words
+Key Constraints (ordered by importance):
+- [CRITICAL] Every code example must compile and run
+- [CRITICAL] Audience: engineers new to the project (not domain experts)
+- Keep overview ≤ 200 words; be ruthlessly concise
 
-Verification:
-- New engineer can understand the subject in < 10 min
-- All code examples compile
-- Top 3 failure modes documented with fixes`,
+Expected Output:
+- docs/<subject>.md with all 4 sections
+- JSDoc comments on public functions
+- Working code examples
+- Troubleshooting guide
+
+---
+
+Verification Checklist:
+□ New engineer can understand the subject in < 10 min
+□ All code examples compile
+□ Top 3 failure modes documented with fixes`,
         },
       ];
   }
